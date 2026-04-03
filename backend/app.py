@@ -10,8 +10,12 @@ from flask_cors import CORS
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
 
-import database as db
-from blockchain import blockchain
+try:
+    from . import database as db
+    from .blockchain import blockchain
+except ImportError:
+    import database as db
+    from blockchain import blockchain
 
 # ── App Setup ──────────────────────────────────────────────────────────────
 app = Flask(__name__, static_folder="../frontend", template_folder="../frontend")
