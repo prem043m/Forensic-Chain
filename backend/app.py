@@ -419,4 +419,9 @@ if __name__ == "__main__":
     print(f"  Blockchain: {blockchain.is_connected and 'Connected' or 'Not connected (offline mode)'}")
     print(f"  Contract:   {blockchain.contract_address or 'Not deployed'}")
     print("=" * 60)
-    app.run(debug=os.environ.get("FLASK_DEBUG", "false").lower() == "true", host="0.0.0.0", port=5000)
+    port = int(os.environ.get("PORT", 5000))
+    app.run(
+        debug=os.environ.get("FLASK_DEBUG", "false").lower() == "true",
+        host="0.0.0.0",
+        port=port,
+    )
