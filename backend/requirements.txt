@@ -1,0 +1,6 @@
+flask==3.0.0
+flask-cors==4.0.0
+web3==6.15.1
+werkzeug==3.0.1
+py-solc-x==2.0.5
+python-dotenv==1.0.1

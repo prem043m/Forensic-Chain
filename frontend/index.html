@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ForensicChain — Login</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #0a0c10;
+    --bg2: #111418;
+    --bg3: #181c23;
+    --border: rgba(255,255,255,0.08);
+    --border2: rgba(255,255,255,0.15);
+    --text: #e8eaf0;
+    --text2: #8892a4;
+    --text3: #4a5568;
+    --blue: #4f8ef7;
+    --blue-bg: rgba(79,142,247,0.12);
+    --green: #34d399;
+    --green-bg: rgba(52,211,153,0.1);
+    --red: #f87171;
+    --red-bg: rgba(248,113,113,0.1);
+    --amber: #fbbf24;
+  }
+
+  body {
+    font-family: 'Syne', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .grid-bg {
+    position: fixed; inset: 0; z-index: 0;
+    background-image:
+      linear-gradient(rgba(79,142,247,0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(79,142,247,0.03) 1px, transparent 1px);
+    background-size: 40px 40px;
+  }
+
+  .container {
+    position: relative; z-index: 1;
+    width: 100%; max-width: 420px;
+    padding: 20px;
+  }
+
+  .logo-wrap {
+    text-align: center; margin-bottom: 32px;
+  }
+
+  .logo-icon {
+    width: 56px; height: 56px;
+    background: var(--blue-bg);
+    border: 1px solid rgba(79,142,247,0.3);
+    border-radius: 14px;
+    display: inline-flex; align-items: center; justify-content: center;
+    margin-bottom: 16px;
+  }
+
+  .logo-icon svg { width: 28px; height: 28px; }
+
+  h1 { font-size: 26px; font-weight: 800; letter-spacing: -0.5px; }
+  h1 span { color: var(--blue); }
+
+  .tagline {
+    font-size: 12px; color: var(--text2);
+    font-family: 'JetBrains Mono', monospace;
+    letter-spacing: 2px; text-transform: uppercase;
+    margin-top: 6px;
+  }
+
+  .card {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 28px;
+  }
+
+  .tabs {
+    display: flex; gap: 4px;
+    background: var(--bg3);
+    border-radius: 10px; padding: 4px;
+    margin-bottom: 24px;
+  }
+
+  .tab-btn {
+    flex: 1; padding: 8px;
+    border: none; border-radius: 7px;
+    font-family: 'Syne', sans-serif;
+    font-size: 13px; font-weight: 600;
+    cursor: pointer; transition: all 0.15s;
+    background: transparent; color: var(--text2);
+  }
+
+  .tab-btn.active {
+    background: var(--bg2);
+    color: var(--text);
+    border: 1px solid var(--border);
+  }
+
+  .form-group { margin-bottom: 16px; }
+
+  label {
+    display: block;
+    font-size: 11px; font-weight: 600;
+    text-transform: uppercase; letter-spacing: 1px;
+    color: var(--text2);
+    font-family: 'JetBrains Mono', monospace;
+    margin-bottom: 6px;
+  }
+
+  input, select {
+    width: 100%; padding: 10px 14px;
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text);
+    font-family: 'Syne', sans-serif;
+    font-size: 14px;
+    outline: none;
+    transition: border-color 0.15s;
+  }
+
+  input:focus, select:focus { border-color: var(--blue); }
+  select option { background: var(--bg3); }
+
+  .btn {
+    width: 100%; padding: 12px;
+    background: var(--blue);
+    border: none; border-radius: 8px;
+    color: #fff;
+    font-family: 'Syne', sans-serif;
+    font-size: 14px; font-weight: 700;
+    cursor: pointer; transition: opacity 0.15s;
+    margin-top: 8px;
+  }
+
+  .btn:hover { opacity: 0.88; }
+  .btn:active { transform: scale(0.99); }
+
+  .alert {
+    padding: 10px 14px; border-radius: 8px;
+    font-size: 13px; margin-bottom: 16px;
+    display: none;
+  }
+
+  .alert-err { background: var(--red-bg); color: var(--red); border: 1px solid rgba(248,113,113,0.2); }
+  .alert-ok  { background: var(--green-bg); color: var(--green); border: 1px solid rgba(52,211,153,0.2); }
+
+  .nodes {
+    display: flex; gap: 8px; margin-top: 20px;
+    justify-content: center;
+  }
+
+  .node {
+    display: flex; align-items: center; gap: 5px;
+    font-size: 11px; color: var(--text3);
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  .node-dot {
+    width: 6px; height: 6px; border-radius: 50%;
+    background: var(--green);
+    animation: pulse 2s infinite;
+  }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+  }
+
+  .panel { display: none; }
+  .panel.active { display: block; }
+</style>
+</head>
+<body>
+<div class="grid-bg"></div>
+
+<div class="container">
+  <div class="logo-wrap">
+    <div class="logo-icon">
+      <svg viewBox="0 0 24 24" fill="none" stroke="#4f8ef7" stroke-width="2">
+        <path d="M12 2L2 7l10 5 10-5-10-5z"/>
+        <path d="M2 17l10 5 10-5"/>
+        <path d="M2 12l10 5 10-5"/>
+      </svg>
+    </div>
+    <h1>Forensic<span>Chain</span></h1>
+    <div class="tagline">Blockchain Evidence Management</div>
+  </div>
+
+  <div class="card">
+    <div class="tabs">
+      <button class="tab-btn active" onclick="switchTab('login')">Sign In</button>
+      <button class="tab-btn" onclick="switchTab('register')">Register</button>
+    </div>
+
+    <!-- Login Panel -->
+    <div class="panel active" id="panel-login">
+      <div class="alert alert-err" id="login-err"></div>
+      <div class="form-group">
+        <label>Email</label>
+        <input type="email" id="login-email" placeholder="investigator@agency.gov" value="admin@forensic.gov">
+      </div>
+      <div class="form-group">
+        <label>Password</label>
+        <input type="password" id="login-pass" placeholder="••••••••" value="admin123">
+      </div>
+      <button class="btn" onclick="doLogin()">Sign In</button>
+    </div>
+
+    <!-- Register Panel -->
+    <div class="panel" id="panel-register">
+      <div class="alert alert-err" id="reg-err"></div>
+      <div class="alert alert-ok" id="reg-ok"></div>
+      <div class="form-group">
+        <label>Full Name</label>
+        <input type="text" id="reg-name" placeholder="Det. John Smith">
+      </div>
+      <div class="form-group">
+        <label>Email</label>
+        <input type="email" id="reg-email" placeholder="name@agency.gov">
+      </div>
+      <div class="form-group">
+        <label>Password</label>
+        <input type="password" id="reg-pass" placeholder="Min 8 characters">
+      </div>
+      <div class="form-group">
+        <label>Role</label>
+        <select id="reg-role">
+          <option value="investigator">Investigator</option>
+          <option value="analyst">Forensic Analyst</option>
+          <option value="court_authority">Court Authority</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Wallet Address (optional)</label>
+        <input type="text" id="reg-wallet" placeholder="0x...">
+      </div>
+      <button class="btn" onclick="doRegister()">Create Account</button>
+    </div>
+  </div>
+
+  <div class="nodes">
+    <div class="node"><div class="node-dot"></div> Police Lab</div>
+    <div class="node"><div class="node-dot" style="animation-delay:0.7s"></div> Forensic Lab</div>
+    <div class="node"><div class="node-dot" style="animation-delay:1.4s"></div> Court</div>
+  </div>
+</div>
+
+<script>
+function switchTab(tab) {
+  document.querySelectorAll('.tab-btn').forEach((b,i) => b.classList.toggle('active', (tab==='login'?0:1)===i));
+  document.getElementById('panel-login').classList.toggle('active', tab==='login');
+  document.getElementById('panel-register').classList.toggle('active', tab==='register');
+}
+
+function showAlert(id, msg) {
+  const el = document.getElementById(id);
+  el.textContent = msg; el.style.display = 'block';
+  setTimeout(() => el.style.display = 'none', 4000);
+}
+
+async function doLogin() {
+  const email = document.getElementById('login-email').value.trim();
+  const password = document.getElementById('login-pass').value;
+  if (!email || !password) return showAlert('login-err', 'Fill in all fields');
+
+  const res = await fetch('/api/auth/login', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    credentials: 'include',
+    body: JSON.stringify({email, password})
+  });
+  const data = await res.json();
+  if (res.ok) {
+    window.location.href = '/dashboard.html';
+  } else {
+    showAlert('login-err', data.error || 'Login failed');
+  }
+}
+
+async function doRegister() {
+  const name = document.getElementById('reg-name').value.trim();
+  const email = document.getElementById('reg-email').value.trim();
+  const password = document.getElementById('reg-pass').value;
+  const role = document.getElementById('reg-role').value;
+  const wallet_address = document.getElementById('reg-wallet').value.trim();
+
+  if (!name || !email || !password) return showAlert('reg-err', 'Fill in all required fields');
+  if (password.length < 8) return showAlert('reg-err', 'Password must be at least 8 characters');
+
+  const res = await fetch('/api/auth/register', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({name, email, password, role, wallet_address})
+  });
+  const data = await res.json();
+  if (res.ok) {
+    showAlert('reg-ok', 'Account created! You can now sign in.');
+    setTimeout(() => switchTab('login'), 1500);
+  } else {
+    showAlert('reg-err', data.error || 'Registration failed');
+  }
+}
+
+// Auto-redirect if already logged in
+fetch('/api/auth/me', {credentials: 'include'})
+  .then(r => r.ok && (window.location.href = '/dashboard.html'))
+  .catch(() => {});
+
+// Enter key support
+document.addEventListener('keydown', e => {
+  if (e.key === 'Enter') {
+    const activePanel = document.querySelector('.panel.active').id;
+    activePanel === 'panel-login' ? doLogin() : doRegister();
+  }
+});
+</script>
+</body>
+</html>

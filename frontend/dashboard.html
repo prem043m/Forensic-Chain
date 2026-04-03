@@ -1,0 +1,1128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ForensicChain — Dashboard</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #0a0c10; --bg2: #111418; --bg3: #181c23; --bg4: #1e2330;
+    --border: rgba(255,255,255,0.07); --border2: rgba(255,255,255,0.13);
+    --text: #e8eaf0; --text2: #8892a4; --text3: #4a5568;
+    --blue: #4f8ef7; --blue-bg: rgba(79,142,247,0.12); --blue-border: rgba(79,142,247,0.3);
+    --green: #34d399; --green-bg: rgba(52,211,153,0.1); --green-border: rgba(52,211,153,0.25);
+    --red: #f87171; --red-bg: rgba(248,113,113,0.1); --red-border: rgba(248,113,113,0.25);
+    --amber: #fbbf24; --amber-bg: rgba(251,191,36,0.1); --amber-border: rgba(251,191,36,0.25);
+    --purple: #a78bfa;
+  }
+
+  body { font-family: 'Syne', sans-serif; background: var(--bg); color: var(--text); display: flex; min-height: 100vh; }
+  .mono { font-family: 'JetBrains Mono', monospace; }
+
+  /* Sidebar */
+  .sidebar {
+    width: 220px; min-height: 100vh; background: var(--bg2);
+    border-right: 1px solid var(--border); display: flex; flex-direction: column;
+    position: fixed; top: 0; left: 0; z-index: 100;
+  }
+
+  .sidebar-logo {
+    padding: 20px 16px 16px;
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; gap: 10px;
+  }
+
+  .logo-mark {
+    width: 32px; height: 32px; border-radius: 8px;
+    background: var(--blue-bg); border: 1px solid var(--blue-border);
+    display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+  }
+
+  .logo-mark svg { width: 16px; height: 16px; }
+
+  .logo-text { font-size: 14px; font-weight: 800; }
+  .logo-text span { color: var(--blue); }
+  .logo-version { font-size: 9px; color: var(--text3); font-family: 'JetBrains Mono', monospace; }
+
+  .sidebar-nav { padding: 12px 10px; flex: 1; }
+  .nav-section-label {
+    font-size: 9px; letter-spacing: 1.5px; text-transform: uppercase;
+    color: var(--text3); font-family: 'JetBrains Mono', monospace;
+    padding: 0 8px; margin: 12px 0 6px;
+  }
+
+  .nav-item {
+    display: flex; align-items: center; gap: 10px;
+    padding: 8px 10px; border-radius: 8px;
+    font-size: 13px; font-weight: 600; cursor: pointer;
+    color: var(--text2); transition: all 0.12s; margin-bottom: 2px;
+    border: 1px solid transparent;
+  }
+
+  .nav-item:hover { background: var(--bg3); color: var(--text); }
+  .nav-item.active { background: var(--blue-bg); color: var(--blue); border-color: var(--blue-border); }
+  .nav-item svg { width: 15px; height: 15px; stroke: currentColor; fill: none; stroke-width: 2; flex-shrink: 0; }
+  .nav-badge { margin-left: auto; font-size: 10px; background: var(--bg3); padding: 1px 6px; border-radius: 10px; font-family: 'JetBrains Mono', monospace; }
+
+  .sidebar-bottom {
+    padding: 12px 10px; border-top: 1px solid var(--border);
+  }
+
+  .user-card {
+    display: flex; align-items: center; gap: 10px;
+    padding: 8px 10px; border-radius: 8px;
+    background: var(--bg3);
+  }
+
+  .avatar {
+    width: 30px; height: 30px; border-radius: 50%;
+    background: var(--blue-bg); border: 1px solid var(--blue-border);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 11px; font-weight: 700; color: var(--blue); flex-shrink: 0;
+  }
+
+  .user-info { flex: 1; min-width: 0; }
+  .user-name { font-size: 12px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .user-role { font-size: 10px; color: var(--text3); font-family: 'JetBrains Mono', monospace; }
+
+  .logout-btn {
+    background: none; border: none; cursor: pointer;
+    color: var(--text3); padding: 4px; border-radius: 4px;
+    display: flex; align-items: center;
+    transition: color 0.12s;
+  }
+  .logout-btn:hover { color: var(--red); }
+  .logout-btn svg { width: 14px; height: 14px; stroke: currentColor; fill: none; stroke-width: 2; }
+
+  /* Main */
+  .main { margin-left: 220px; flex: 1; display: flex; flex-direction: column; }
+
+  .topbar {
+    height: 52px; background: var(--bg2);
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; padding: 0 24px;
+    justify-content: space-between;
+    position: sticky; top: 0; z-index: 10;
+  }
+
+  .page-title { font-size: 15px; font-weight: 700; }
+  .page-subtitle { font-size: 11px; color: var(--text3); font-family: 'JetBrains Mono', monospace; }
+
+  .bc-status {
+    display: flex; align-items: center; gap: 6px;
+    font-size: 11px; color: var(--text2);
+    font-family: 'JetBrains Mono', monospace;
+    background: var(--bg3); padding: 5px 10px; border-radius: 20px;
+    border: 1px solid var(--border);
+  }
+
+  .bc-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--green); animation: blink 2s infinite; }
+  @keyframes blink { 0%,100%{opacity:1} 50%{opacity:.3} }
+
+  .content { padding: 24px; flex: 1; }
+
+  /* Panels */
+  .panel { display: none; }
+  .panel.active { display: block; }
+
+  /* Stats Grid */
+  .stats-grid { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 12px; margin-bottom: 24px; }
+
+  .stat-card {
+    background: var(--bg2); border: 1px solid var(--border);
+    border-radius: 12px; padding: 16px;
+  }
+
+  .stat-label { font-size: 10px; text-transform: uppercase; letter-spacing: 1px; color: var(--text3); font-family: 'JetBrains Mono', monospace; margin-bottom: 8px; }
+  .stat-value { font-size: 30px; font-weight: 800; line-height: 1; }
+  .stat-sub { font-size: 11px; color: var(--text2); margin-top: 6px; font-family: 'JetBrains Mono', monospace; }
+
+  /* Cards */
+  .card {
+    background: var(--bg2); border: 1px solid var(--border);
+    border-radius: 12px; overflow: hidden; margin-bottom: 16px;
+  }
+
+  .card-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 12px 18px; border-bottom: 1px solid var(--border);
+  }
+
+  .card-title { font-size: 13px; font-weight: 700; display: flex; align-items: center; gap: 8px; }
+  .card-title svg { width: 14px; height: 14px; stroke: var(--blue); fill: none; stroke-width: 2; }
+
+  /* Buttons */
+  .btn {
+    padding: 7px 16px; border-radius: 7px;
+    font-family: 'Syne', sans-serif; font-size: 12px; font-weight: 600;
+    cursor: pointer; border: 1px solid var(--border2);
+    background: transparent; color: var(--text); transition: all 0.12s;
+  }
+  .btn:hover { background: var(--bg3); }
+  .btn-primary { background: var(--blue-bg); color: var(--blue); border-color: var(--blue-border); }
+  .btn-primary:hover { opacity: .85; }
+  .btn-sm { padding: 4px 10px; font-size: 11px; }
+  .btn-danger { background: var(--red-bg); color: var(--red); border-color: var(--red-border); }
+
+  /* Table */
+  table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  th {
+    text-align: left; padding: 8px 16px;
+    font-size: 10px; text-transform: uppercase; letter-spacing: 1px;
+    color: var(--text3); font-family: 'JetBrains Mono', monospace; font-weight: 400;
+    border-bottom: 1px solid var(--border);
+  }
+  td { padding: 11px 16px; border-bottom: 1px solid var(--border); color: var(--text); }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: rgba(255,255,255,0.02); }
+  .hash-cell { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--text3); max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  /* Badges */
+  .badge {
+    display: inline-flex; align-items: center; gap: 4px;
+    padding: 3px 8px; border-radius: 20px;
+    font-size: 10px; font-weight: 600; font-family: 'JetBrains Mono', monospace;
+    white-space: nowrap;
+  }
+  .badge-ok     { background: var(--green-bg);  color: var(--green);  border: 1px solid var(--green-border); }
+  .badge-warn   { background: var(--amber-bg);  color: var(--amber);  border: 1px solid var(--amber-border); }
+  .badge-err    { background: var(--red-bg);    color: var(--red);    border: 1px solid var(--red-border); }
+  .badge-info   { background: var(--blue-bg);   color: var(--blue);   border: 1px solid var(--blue-border); }
+  .badge-purple { background: rgba(167,139,250,0.1); color: var(--purple); border: 1px solid rgba(167,139,250,0.3); }
+
+  /* Forms */
+  .form-group { margin-bottom: 14px; }
+  label { display: block; font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 1px; color: var(--text2); font-family: 'JetBrains Mono', monospace; margin-bottom: 5px; }
+  input[type=text], input[type=email], input[type=file], textarea, select {
+    width: 100%; padding: 9px 12px;
+    background: var(--bg3); border: 1px solid var(--border2);
+    border-radius: 8px; color: var(--text);
+    font-family: 'Syne', sans-serif; font-size: 13px;
+    outline: none; transition: border-color 0.12s;
+  }
+  input:focus, textarea:focus, select:focus { border-color: var(--blue); }
+  select option { background: var(--bg3); }
+  textarea { min-height: 80px; resize: vertical; }
+  .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+
+  /* Upload zone */
+  .upload-zone {
+    border: 1.5px dashed var(--border2); border-radius: 10px;
+    padding: 32px; text-align: center; cursor: pointer;
+    transition: all 0.15s;
+  }
+  .upload-zone:hover, .upload-zone.dragging { border-color: var(--blue); background: var(--blue-bg); }
+  .upload-zone svg { width: 36px; height: 36px; stroke: var(--text3); fill: none; stroke-width: 1.5; margin: 0 auto 12px; display: block; }
+  .upload-zone:hover svg, .upload-zone.dragging svg { stroke: var(--blue); }
+  .upload-zone p { font-size: 13px; color: var(--text2); }
+  .upload-zone span { font-size: 11px; color: var(--text3); font-family: 'JetBrains Mono', monospace; }
+
+  /* Alert */
+  .alert { padding: 10px 14px; border-radius: 8px; font-size: 13px; margin-bottom: 14px; display: none; }
+  .alert-ok  { background: var(--green-bg); color: var(--green); border: 1px solid var(--green-border); }
+  .alert-err { background: var(--red-bg);   color: var(--red);   border: 1px solid var(--red-border); }
+  .alert-info{ background: var(--blue-bg);  color: var(--blue);  border: 1px solid var(--blue-border); }
+
+  /* Verify result */
+  .verify-result { border-radius: 10px; padding: 18px; margin-top: 16px; }
+  .verify-ok { background: var(--green-bg); border: 1px solid var(--green-border); }
+  .verify-fail { background: var(--red-bg); border: 1px solid var(--red-border); }
+  .verify-title { font-size: 16px; font-weight: 800; margin-bottom: 12px; display: flex; align-items: center; gap: 8px; }
+  .hash-compare { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 12px; }
+  .hash-box { background: rgba(0,0,0,0.25); border-radius: 8px; padding: 12px; }
+  .hash-box-label { font-size: 10px; text-transform: uppercase; letter-spacing: 1px; font-family: 'JetBrains Mono', monospace; margin-bottom: 6px; opacity: .7; }
+  .hash-val { font-family: 'JetBrains Mono', monospace; font-size: 10px; word-break: break-all; line-height: 1.6; }
+
+  /* Chain of custody timeline */
+  .timeline { padding: 16px 18px; }
+  .tl-item { display: flex; gap: 12px; margin-bottom: 18px; }
+  .tl-left { display: flex; flex-direction: column; align-items: center; }
+  .tl-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; margin-top: 2px; }
+  .tl-line { width: 1px; flex: 1; background: var(--border); margin-top: 4px; min-height: 24px; }
+  .tl-item:last-child .tl-line { display: none; }
+  .tl-content { flex: 1; }
+  .tl-action { font-size: 13px; font-weight: 700; }
+  .tl-actor { font-size: 11px; color: var(--text2); margin-top: 2px; }
+  .tl-note { font-size: 11px; color: var(--text3); font-family: 'JetBrains Mono', monospace; margin-top: 2px; }
+  .tl-time { font-size: 10px; color: var(--text3); font-family: 'JetBrains Mono', monospace; margin-top: 4px; }
+
+  /* Blockchain blocks */
+  .blocks-row { display: flex; align-items: center; gap: 0; padding: 16px 18px; overflow-x: auto; }
+  .bc-block {
+    flex-shrink: 0; width: 160px; background: var(--bg3);
+    border: 1px solid var(--border); border-radius: 8px; padding: 12px;
+  }
+  .bc-block.latest { border-color: var(--blue-border); background: var(--blue-bg); }
+  .bc-arrow { color: var(--text3); padding: 0 8px; font-size: 16px; flex-shrink: 0; }
+  .bc-num { font-size: 10px; color: var(--text3); font-family: 'JetBrains Mono', monospace; margin-bottom: 5px; }
+  .bc-hash { font-size: 9px; font-family: 'JetBrains Mono', monospace; color: var(--blue); word-break: break-all; line-height: 1.5; }
+  .bc-meta { font-size: 10px; color: var(--text2); margin-top: 6px; }
+
+  /* Spinner */
+  .spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid var(--border2); border-top-color: var(--blue); border-radius: 50%; animation: spin .6s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* Modal */
+  .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.7); z-index: 200; align-items: center; justify-content: center; }
+  .modal-overlay.open { display: flex; }
+  .modal { background: var(--bg2); border: 1px solid var(--border2); border-radius: 14px; width: 560px; max-width: 95vw; max-height: 85vh; overflow-y: auto; }
+  .modal-header { display: flex; align-items: center; justify-content: space-between; padding: 16px 20px; border-bottom: 1px solid var(--border); }
+  .modal-title { font-size: 15px; font-weight: 700; }
+  .modal-close { background: none; border: none; cursor: pointer; color: var(--text2); font-size: 20px; padding: 0 4px; }
+  .modal-body { padding: 20px; }
+  .info-grid { display: grid; grid-template-columns: 140px 1fr; gap: 8px 12px; font-size: 12px; }
+  .info-label { color: var(--text3); font-family: 'JetBrains Mono', monospace; }
+  .info-val { color: var(--text); word-break: break-all; }
+
+  .empty-state { padding: 40px; text-align: center; color: var(--text3); font-size: 13px; }
+  .empty-state svg { width: 36px; height: 36px; stroke: var(--text3); fill: none; stroke-width: 1.5; margin: 0 auto 12px; display: block; }
+  .divider { height: 1px; background: var(--border); margin: 16px 0; }
+
+  @media (max-width: 900px) {
+    .stats-grid { grid-template-columns: repeat(2,1fr); }
+    .form-row { grid-template-columns: 1fr; }
+    .hash-compare { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<!-- Sidebar -->
+<aside class="sidebar">
+  <div class="sidebar-logo">
+    <div class="logo-mark">
+      <svg viewBox="0 0 24 24" fill="none" stroke="#4f8ef7" stroke-width="2">
+        <path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/>
+      </svg>
+    </div>
+    <div>
+      <div class="logo-text">Forensic<span>Chain</span></div>
+      <div class="logo-version">v2.4.1</div>
+    </div>
+  </div>
+
+  <nav class="sidebar-nav">
+    <div class="nav-section-label">Main</div>
+    <div class="nav-item active" onclick="showPanel('dashboard')">
+      <svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+      Dashboard
+    </div>
+    <div class="nav-item" onclick="showPanel('upload')">
+      <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+      Upload Evidence
+    </div>
+    <div class="nav-item" onclick="showPanel('evidence')">
+      <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+      Evidence List
+      <span class="nav-badge" id="ev-count">0</span>
+    </div>
+
+    <div class="nav-section-label">Forensics</div>
+    <div class="nav-item" onclick="showPanel('verify')">
+      <svg viewBox="0 0 24 24"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+      Verify Evidence
+    </div>
+    <div class="nav-item" onclick="showPanel('custody')">
+      <svg viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+      Chain of Custody
+    </div>
+
+    <div class="nav-section-label">System</div>
+    <div class="nav-item" onclick="showPanel('blockchain')">
+      <svg viewBox="0 0 24 24"><rect x="2" y="7" width="6" height="6"/><rect x="9" y="7" width="6" height="6"/><rect x="16" y="7" width="6" height="6"/><line x1="5" y1="13" x2="5" y2="17"/><line x1="12" y1="13" x2="12" y2="17"/><line x1="19" y1="13" x2="19" y2="17"/></svg>
+      Blockchain
+    </div>
+    <div class="nav-item" id="admin-nav" onclick="showPanel('admin')" style="display:none">
+      <svg viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>
+      Users
+    </div>
+  </nav>
+
+  <div class="sidebar-bottom">
+    <div class="user-card">
+      <div class="avatar" id="user-avatar">?</div>
+      <div class="user-info">
+        <div class="user-name" id="user-name">Loading...</div>
+        <div class="user-role" id="user-role"></div>
+      </div>
+      <button class="logout-btn" onclick="doLogout()" title="Logout">
+        <svg viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+      </button>
+    </div>
+  </div>
+</aside>
+
+<!-- Main -->
+<main class="main">
+  <div class="topbar">
+    <div>
+      <div class="page-title" id="page-title">Dashboard</div>
+      <div class="page-subtitle" id="page-sub">Overview</div>
+    </div>
+    <div class="bc-status">
+      <div class="bc-dot" id="bc-dot" style="background:var(--amber)"></div>
+      <span id="bc-label">Connecting...</span>
+    </div>
+  </div>
+
+  <div class="content">
+
+    <!-- ── DASHBOARD ──────────────────────────────────────── -->
+    <div class="panel active" id="panel-dashboard">
+      <div class="stats-grid">
+        <div class="stat-card">
+          <div class="stat-label">Total Evidence</div>
+          <div class="stat-value" id="stat-total">—</div>
+          <div class="stat-sub">items registered</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Verified</div>
+          <div class="stat-value" id="stat-verified" style="color:var(--green)">—</div>
+          <div class="stat-sub">integrity confirmed</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Tampered</div>
+          <div class="stat-value" id="stat-tampered" style="color:var(--red)">—</div>
+          <div class="stat-sub">hash mismatch</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Custody Logs</div>
+          <div class="stat-value" id="stat-logs">—</div>
+          <div class="stat-sub">blockchain records</div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">
+            <svg viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+            Recent Evidence
+          </div>
+          <button class="btn btn-sm btn-primary" onclick="showPanel('evidence')">View All</button>
+        </div>
+        <div id="recent-evidence-table">
+          <div class="empty-state"><div class="spinner"></div></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">
+            <svg viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+            Recent Activity
+          </div>
+        </div>
+        <div id="recent-logs">
+          <div class="empty-state"><div class="spinner"></div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── UPLOAD ─────────────────────────────────────────── -->
+    <div class="panel" id="panel-upload">
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">
+            <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+            Upload New Evidence
+          </div>
+        </div>
+        <div style="padding: 20px;">
+          <div class="alert alert-ok"  id="upload-ok"></div>
+          <div class="alert alert-err" id="upload-err"></div>
+
+          <div class="upload-zone" id="drop-zone" onclick="document.getElementById('file-input').click()">
+            <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+            <p>Drop evidence file here or click to browse</p>
+            <span id="file-selected">Supported: .log, .pcap, .img, .pdf, .zip, .csv, .json and more</span>
+          </div>
+          <input type="file" id="file-input" style="display:none" onchange="onFileSelected(this)">
+
+          <div class="divider"></div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label>Case ID</label>
+              <input type="text" id="up-case" placeholder="CASE-2024-001">
+            </div>
+            <div class="form-group">
+              <label>Evidence Description</label>
+              <input type="text" id="up-desc" placeholder="Brief description of evidence">
+            </div>
+          </div>
+
+          <button class="btn btn-primary" onclick="doUpload()" id="upload-btn" style="width:100%">
+            Register on Blockchain &amp; Upload
+          </button>
+
+          <div id="upload-result" style="margin-top:16px;display:none">
+            <div class="card" style="margin:0;background:var(--bg3)">
+              <div style="padding:16px">
+                <div style="font-size:12px;font-weight:700;color:var(--green);margin-bottom:10px">Evidence Registered Successfully</div>
+                <div class="info-grid">
+                  <div class="info-label">Evidence ID</div><div class="info-val" id="res-evid"></div>
+                  <div class="info-label">SHA-256 Hash</div><div class="info-val hash-cell" id="res-hash"></div>
+                  <div class="info-label">TX Hash</div><div class="info-val hash-cell" id="res-tx"></div>
+                  <div class="info-label">Blockchain</div><div class="info-val" id="res-bc"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── EVIDENCE LIST ──────────────────────────────────── -->
+    <div class="panel" id="panel-evidence">
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">
+            <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+            Evidence Registry
+          </div>
+          <div style="display:flex;gap:8px">
+            <input type="text" id="ev-search" placeholder="Search evidence..." style="width:200px;padding:6px 10px;font-size:12px" oninput="filterEvidence()">
+            <button class="btn btn-primary btn-sm" onclick="loadEvidence()">Refresh</button>
+          </div>
+        </div>
+        <div id="evidence-table-wrap">
+          <div class="empty-state"><div class="spinner"></div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── VERIFY ─────────────────────────────────────────── -->
+    <div class="panel" id="panel-verify">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">
+              <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+              Verify by Evidence ID
+            </div>
+          </div>
+          <div style="padding:20px">
+            <div class="alert alert-err" id="v1-err"></div>
+            <div class="form-group">
+              <label>Evidence ID</label>
+              <input type="text" id="v1-id" placeholder="EV-XXXXXXXX">
+            </div>
+            <button class="btn btn-primary" style="width:100%" onclick="verifyById()">Verify Stored File</button>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">
+              <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+              Verify by Re-upload
+            </div>
+          </div>
+          <div style="padding:20px">
+            <div class="alert alert-err" id="v2-err"></div>
+            <div class="form-group">
+              <label>Evidence ID</label>
+              <input type="text" id="v2-id" placeholder="EV-XXXXXXXX">
+            </div>
+            <div class="form-group">
+              <label>Upload File to Verify</label>
+              <input type="file" id="v2-file">
+            </div>
+            <button class="btn btn-primary" style="width:100%" onclick="verifyByFile()">Compare Against Blockchain</button>
+          </div>
+        </div>
+      </div>
+      <div id="verify-result-area"></div>
+    </div>
+
+    <!-- ── CUSTODY ────────────────────────────────────────── -->
+    <div class="panel" id="panel-custody">
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">
+            <svg viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+            Chain of Custody
+          </div>
+        </div>
+        <div style="padding:16px">
+          <div class="form-row" style="margin-bottom:12px">
+            <div>
+              <label>Evidence ID</label>
+              <input type="text" id="coc-id" placeholder="EV-XXXXXXXX" oninput="loadCustody()">
+            </div>
+            <div>
+              <label>Add Custody Action</label>
+              <div style="display:flex;gap:8px">
+                <select id="coc-action" style="flex:1">
+                  <option>Collected</option><option>Analyzed</option>
+                  <option>Transferred</option><option>Verified</option>
+                  <option>Presented</option><option>Stored</option>
+                  <option>Released</option>
+                </select>
+                <button class="btn btn-primary btn-sm" onclick="addCustodyAction()">Add</button>
+              </div>
+            </div>
+          </div>
+          <div class="form-group">
+            <label>Note</label>
+            <input type="text" id="coc-note" placeholder="Describe the action taken">
+          </div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">Custody Timeline</div>
+        </div>
+        <div id="custody-timeline">
+          <div class="empty-state">
+            <svg viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+            Enter an evidence ID to view its chain of custody
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── BLOCKCHAIN ─────────────────────────────────────── -->
+    <div class="panel" id="panel-blockchain">
+      <div class="stats-grid" style="grid-template-columns:repeat(3,1fr)">
+        <div class="stat-card">
+          <div class="stat-label">Network</div>
+          <div class="stat-value" id="bc-network" style="font-size:18px">—</div>
+          <div class="stat-sub" id="bc-url">—</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Block Height</div>
+          <div class="stat-value" id="bc-block">—</div>
+          <div class="stat-sub">latest block</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Account</div>
+          <div class="stat-value" style="font-size:11px;word-break:break-all;font-family:'JetBrains Mono',monospace" id="bc-account">—</div>
+          <div class="stat-sub" id="bc-balance">—</div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">
+            <svg viewBox="0 0 24 24"><rect x="2" y="7" width="6" height="6"/><rect x="9" y="7" width="6" height="6"/><rect x="16" y="7" width="6" height="6"/><line x1="5" y1="13" x2="5" y2="17"/><line x1="12" y1="13" x2="12" y2="17"/><line x1="19" y1="13" x2="19" y2="17"/></svg>
+            Contract Configuration
+          </div>
+          <button class="btn btn-primary btn-sm" onclick="deployContract(event)">Deploy Contract</button>
+        </div>
+        <div style="padding:18px">
+          <div class="form-row" style="align-items:flex-end">
+            <div class="form-group" style="margin:0">
+              <label>Contract Address</label>
+              <input type="text" id="bc-contract-input" placeholder="0x...">
+            </div>
+            <button class="btn btn-primary" onclick="setContractAddress()">Set Address</button>
+          </div>
+          <div style="margin-top:10px;font-size:11px;color:var(--text3);font-family:'JetBrains Mono',monospace" id="bc-contract-display">Not set</div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">Distributed Nodes</div>
+        </div>
+        <div style="padding:16px;display:grid;grid-template-columns:repeat(3,1fr);gap:12px">
+          <div style="background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:14px;text-align:center">
+            <div style="font-size:11px;color:var(--green);font-family:'JetBrains Mono',monospace;margin-bottom:4px">● ONLINE</div>
+            <div style="font-weight:700">Police Lab</div>
+            <div style="font-size:10px;color:var(--text3);margin-top:4px">Node 1 · Port 7545</div>
+          </div>
+          <div style="background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:14px;text-align:center">
+            <div style="font-size:11px;color:var(--green);font-family:'JetBrains Mono',monospace;margin-bottom:4px">● ONLINE</div>
+            <div style="font-weight:700">Forensic Lab</div>
+            <div style="font-size:10px;color:var(--text3);margin-top:4px">Node 2 · Port 7546</div>
+          </div>
+          <div style="background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:14px;text-align:center">
+            <div style="font-size:11px;color:var(--amber);font-family:'JetBrains Mono',monospace;margin-bottom:4px">● SYNCING</div>
+            <div style="font-weight:700">Court</div>
+            <div style="font-size:10px;color:var(--text3);margin-top:4px">Node 3 · Port 7547</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── ADMIN USERS ─────────────────────────────────────── -->
+    <div class="panel" id="panel-admin">
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">
+            <svg viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>
+            Registered Users
+          </div>
+        </div>
+        <div id="users-table-wrap">
+          <div class="empty-state"><div class="spinner"></div></div>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /content -->
+</main>
+
+<!-- Detail Modal -->
+<div class="modal-overlay" id="ev-modal">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title" id="modal-title">Evidence Detail</div>
+      <button class="modal-close" onclick="closeModal()">×</button>
+    </div>
+    <div class="modal-body" id="modal-body"></div>
+  </div>
+</div>
+
+<script>
+const API = '';
+let currentUser = null;
+let allEvidence = [];
+
+// ── Init ────────────────────────────────────────────────────
+async function init() {
+  const res = await fetch(`${API}/api/auth/me`, {credentials:'include'});
+  if (!res.ok) { window.location.href = '/index.html'; return; }
+  currentUser = await res.json();
+
+  document.getElementById('user-name').textContent = currentUser.name;
+  document.getElementById('user-role').textContent = currentUser.role.replace('_',' ');
+  document.getElementById('user-avatar').textContent = currentUser.name.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
+
+  if (currentUser.role === 'admin') document.getElementById('admin-nav').style.display = '';
+
+  loadStats();
+  loadRecentEvidence();
+  loadRecentLogs();
+  loadBlockchainInfo();
+  setInterval(loadBlockchainInfo, 15000);
+  setInterval(loadStats, 30000);
+}
+
+// ── Navigation ──────────────────────────────────────────────
+const panelTitles = {
+  dashboard: ['Dashboard', 'Overview'],
+  upload: ['Upload Evidence', 'Register new evidence on blockchain'],
+  evidence: ['Evidence Registry', 'All registered evidence'],
+  verify: ['Verify Evidence', 'Hash integrity check'],
+  custody: ['Chain of Custody', 'Evidence handling history'],
+  blockchain: ['Blockchain', 'Network status & contract'],
+  admin: ['User Management', 'Registered system users'],
+};
+
+function showPanel(name) {
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  document.getElementById(`panel-${name}`).classList.add('active');
+  const nav = [...document.querySelectorAll('.nav-item')].find(n => n.getAttribute('onclick')?.includes(`'${name}'`));
+  if (nav) nav.classList.add('active');
+  const [title, sub] = panelTitles[name] || [name, ''];
+  document.getElementById('page-title').textContent = title;
+  document.getElementById('page-sub').textContent = sub;
+
+  if (name === 'evidence') loadEvidence();
+  if (name === 'admin') loadUsers();
+}
+
+// ── Logout ──────────────────────────────────────────────────
+async function doLogout() {
+  await fetch(`${API}/api/auth/logout`, {method:'POST', credentials:'include'});
+  window.location.href = '/index.html';
+}
+
+// ── Stats ────────────────────────────────────────────────────
+async function loadStats() {
+  const res = await fetch(`${API}/api/admin/stats`, {credentials:'include'});
+  if (!res.ok) return;
+  const d = await res.json();
+  document.getElementById('stat-total').textContent = d.total_evidence;
+  document.getElementById('stat-verified').textContent = d.verified;
+  document.getElementById('stat-tampered').textContent = d.tampered;
+  document.getElementById('stat-logs').textContent = d.total_logs;
+  document.getElementById('ev-count').textContent = d.total_evidence;
+}
+
+// ── Recent Evidence ──────────────────────────────────────────
+async function loadRecentEvidence() {
+  const res = await fetch(`${API}/api/evidence`, {credentials:'include'});
+  if (!res.ok) return;
+  const data = await res.json();
+  allEvidence = data;
+  const recent = data.slice(0,5);
+  const wrap = document.getElementById('recent-evidence-table');
+  if (!recent.length) { wrap.innerHTML = '<div class="empty-state">No evidence uploaded yet</div>'; return; }
+  wrap.innerHTML = buildEvidenceTable(recent, false);
+}
+
+async function loadEvidence() {
+  const res = await fetch(`${API}/api/evidence`, {credentials:'include'});
+  if (!res.ok) return;
+  allEvidence = await res.json();
+  renderEvidenceTable(allEvidence);
+}
+
+function filterEvidence() {
+  const q = document.getElementById('ev-search').value.toLowerCase();
+  const filtered = allEvidence.filter(e =>
+    e.evidence_id.toLowerCase().includes(q) ||
+    e.file_name.toLowerCase().includes(q) ||
+    (e.case_id||'').toLowerCase().includes(q)
+  );
+  renderEvidenceTable(filtered);
+}
+
+function renderEvidenceTable(data) {
+  document.getElementById('evidence-table-wrap').innerHTML = data.length
+    ? buildEvidenceTable(data, true)
+    : '<div class="empty-state">No evidence found</div>';
+}
+
+function buildEvidenceTable(rows, full) {
+  const header = `<table><thead><tr>
+    <th>Evidence ID</th><th>File Name</th><th>Case ID</th>
+    ${full ? '<th>Uploader</th>' : ''}
+    <th>Hash (SHA-256)</th><th>Status</th><th>Date</th><th></th>
+  </tr></thead><tbody>`;
+  const body = rows.map(e => `<tr>
+    <td><span class="mono" style="font-size:11px;color:var(--blue)">${escapeHtml(e.evidence_id)}</span></td>
+    <td>${escapeHtml(e.file_name)}</td>
+    <td><span class="mono" style="font-size:11px">${escapeHtml(e.case_id||'—')}</span></td>
+    ${full ? `<td>${escapeHtml(e.uploader_name||'—')}</td>` : ''}
+    <td><div class="hash-cell">${escapeHtml(e.file_hash)}</div></td>
+    <td>${statusBadge(e.status)}</td>
+    <td class="mono" style="font-size:10px;color:var(--text3)">${fmtDate(e.created_at)}</td>
+    <td><button class="btn btn-sm" onclick="viewEvidence('${escapeAttr(e.evidence_id)}')">Detail</button></td>
+  </tr>`).join('');
+  return header + body + '</tbody></table>';
+}
+
+// ── Recent Logs ──────────────────────────────────────────────
+async function loadRecentLogs() {
+  const res = await fetch(`${API}/api/admin/logs`, {credentials:'include'});
+  if (!res.ok) return;
+  const logs = await res.json();
+  const wrap = document.getElementById('recent-logs');
+  if (!logs.length) { wrap.innerHTML = '<div class="empty-state">No activity yet</div>'; return; }
+  const recent = logs.slice(0,8);
+  wrap.innerHTML = `<div class="timeline">${recent.map(l => `
+    <div class="tl-item">
+      <div class="tl-left">
+        <div class="tl-dot" style="background:${actionColor(l.action)}"></div>
+        <div class="tl-line"></div>
+      </div>
+      <div class="tl-content">
+        <div class="tl-action">${escapeHtml(l.action)} <span style="font-size:11px;font-weight:400;color:var(--blue)">${escapeHtml(l.evidence_id)}</span></div>
+        <div class="tl-actor">${escapeHtml(l.actor_name||'System')}</div>
+        <div class="tl-time">${fmtDate(l.created_at)}</div>
+      </div>
+    </div>`).join('')}</div>`;
+}
+
+// ── Upload ───────────────────────────────────────────────────
+let selectedFile = null;
+
+function onFileSelected(input) {
+  selectedFile = input.files[0];
+  if (selectedFile) document.getElementById('file-selected').textContent = `Selected: ${selectedFile.name} (${fmtSize(selectedFile.size)})`;
+}
+
+const dz = document.getElementById('drop-zone');
+dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('dragging'); });
+dz.addEventListener('dragleave', () => dz.classList.remove('dragging'));
+dz.addEventListener('drop', e => {
+  e.preventDefault(); dz.classList.remove('dragging');
+  selectedFile = e.dataTransfer.files[0];
+  if (selectedFile) document.getElementById('file-selected').textContent = `Selected: ${selectedFile.name} (${fmtSize(selectedFile.size)})`;
+});
+
+async function doUpload() {
+  if (!selectedFile) { showAlert('upload-err', 'Please select a file'); return; }
+  const btn = document.getElementById('upload-btn');
+  btn.innerHTML = '<span class="spinner"></span> Registering on blockchain...';
+  btn.disabled = true;
+
+  const fd = new FormData();
+  fd.append('file', selectedFile);
+  fd.append('case_id', document.getElementById('up-case').value || 'CASE-UNKNOWN');
+  fd.append('description', document.getElementById('up-desc').value);
+
+  try {
+    const res = await fetch(`${API}/api/upload_evidence`, {method:'POST', credentials:'include', body:fd});
+    const data = await res.json();
+    if (res.ok) {
+      document.getElementById('res-evid').textContent = data.evidence_id;
+      document.getElementById('res-hash').textContent = data.file_hash;
+      document.getElementById('res-tx').textContent = data.tx_hash;
+      document.getElementById('res-bc').innerHTML = data.blockchain_registered
+        ? '<span class="badge badge-ok">Registered</span>'
+        : '<span class="badge badge-warn">Offline Mode</span>';
+      document.getElementById('upload-result').style.display = 'block';
+      showAlert('upload-ok', `Evidence ${data.evidence_id} registered successfully`);
+      selectedFile = null;
+      document.getElementById('file-selected').textContent = 'Supported: .log, .pcap, .img, .pdf, .zip, .csv, .json and more';
+      loadStats();
+    } else {
+      showAlert('upload-err', data.error || 'Upload failed');
+    }
+  } catch(e) { showAlert('upload-err', 'Network error'); }
+  btn.innerHTML = 'Register on Blockchain & Upload';
+  btn.disabled = false;
+}
+
+// ── Verify ───────────────────────────────────────────────────
+async function verifyById() {
+  const id = document.getElementById('v1-id').value.trim();
+  if (!id) { showAlert('v1-err', 'Enter evidence ID'); return; }
+  const res = await fetch(`${API}/api/verify_evidence`, {
+    method:'POST', credentials:'include',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({evidence_id: id})
+  });
+  renderVerifyResult(await res.json(), res.ok);
+}
+
+async function verifyByFile() {
+  const id = document.getElementById('v2-id').value.trim();
+  const file = document.getElementById('v2-file').files[0];
+  if (!id) { showAlert('v2-err', 'Enter evidence ID'); return; }
+  if (!file) { showAlert('v2-err', 'Select a file'); return; }
+  const fd = new FormData();
+  fd.append('file', file);
+  fd.append('evidence_id', id);
+  const res = await fetch(`${API}/api/verify_evidence`, {method:'POST', credentials:'include', body:fd});
+  renderVerifyResult(await res.json(), res.ok);
+}
+
+function renderVerifyResult(data, ok) {
+  if (!ok) {
+    document.getElementById('verify-result-area').innerHTML = `<div class="card" style="margin-top:12px"><div style="padding:16px;color:var(--red)">${escapeHtml(data.error||'Verification failed')}</div></div>`;
+    return;
+  }
+  const intact = data.intact;
+  const html = `
+    <div class="verify-result ${intact ? 'verify-ok' : 'verify-fail'}">
+      <div class="verify-title">
+        ${intact
+          ? '<span style="color:var(--green)">✓ Evidence Intact</span>'
+          : '<span style="color:var(--red)">✗ Tamper Detected</span>'}
+      </div>
+      <div style="font-size:12px;opacity:.8;margin-bottom:8px">
+        Source: <span class="mono">${escapeHtml(data.source || 'blockchain')}</span>
+        · Evidence ID: <span class="mono">${escapeHtml(data.evidence_id)}</span>
+      </div>
+      <div class="hash-compare">
+        <div class="hash-box">
+          <div class="hash-box-label">Stored Hash (Blockchain)</div>
+          <div class="hash-val" style="color:${intact?'var(--green)':'var(--red)'}">${escapeHtml(data.stored_hash)}</div>
+        </div>
+        <div class="hash-box">
+          <div class="hash-box-label">Current Hash (File)</div>
+          <div class="hash-val" style="color:${intact?'var(--green)':'var(--red)'}">${escapeHtml(data.current_hash)}</div>
+        </div>
+      </div>
+    </div>`;
+  document.getElementById('verify-result-area').innerHTML = html;
+}
+
+// ── Custody ──────────────────────────────────────────────────
+async function loadCustody() {
+  const id = document.getElementById('coc-id').value.trim();
+  if (!id) return;
+  const res = await fetch(`${API}/api/evidence_history/${id}`, {credentials:'include'});
+  if (!res.ok) return;
+  const data = await res.json();
+  const logs = data.db_logs;
+  if (!logs.length) {
+    document.getElementById('custody-timeline').innerHTML = '<div class="empty-state">No custody records found</div>';
+    return;
+  }
+  document.getElementById('custody-timeline').innerHTML = `<div class="timeline">${logs.map((l,i) => `
+    <div class="tl-item">
+      <div class="tl-left">
+        <div class="tl-dot" style="background:${actionColor(l.action)}"></div>
+        ${i < logs.length-1 ? '<div class="tl-line"></div>' : ''}
+      </div>
+      <div class="tl-content">
+        <div class="tl-action">${escapeHtml(l.action)}</div>
+        <div class="tl-actor">${escapeHtml(l.actor_name||'Unknown')} · ${escapeHtml(l.actor_role||'')}</div>
+        <div class="tl-note">${escapeHtml(l.note||'')}</div>
+        <div class="tl-time">${fmtDate(l.created_at)}</div>
+        ${l.tx_hash ? `<div class="tl-note">TX: ${escapeHtml(l.tx_hash.substring(0,20))}...</div>` : ''}
+      </div>
+    </div>`).join('')}</div>`;
+}
+
+async function addCustodyAction() {
+  const id = document.getElementById('coc-id').value.trim();
+  const action = document.getElementById('coc-action').value;
+  const note = document.getElementById('coc-note').value.trim();
+  if (!id) return alert('Enter evidence ID');
+  const res = await fetch(`${API}/api/transfer_evidence`, {
+    method:'POST', credentials:'include',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({evidence_id:id, action, note: note||action})
+  });
+  if (res.ok) { document.getElementById('coc-note').value = ''; loadCustody(); }
+}
+
+// ── Blockchain Info ──────────────────────────────────────────
+async function loadBlockchainInfo() {
+  const res = await fetch(`${API}/api/blockchain/info`, {credentials:'include'});
+  if (!res.ok) return;
+  const d = await res.json();
+  const connected = d.connected;
+  document.getElementById('bc-dot').style.background = connected ? 'var(--green)' : 'var(--red)';
+  document.getElementById('bc-label').textContent = connected ? `Block #${d.block_number}` : 'Disconnected';
+  document.getElementById('bc-network').textContent = connected ? `Chain ${d.network_id}` : '—';
+  document.getElementById('bc-block').textContent = connected ? d.block_number : '—';
+  document.getElementById('bc-account').textContent = connected ? (d.account||'—') : '—';
+  document.getElementById('bc-balance').textContent = connected ? `${(parseInt(d.balance||0)/1e18).toFixed(2)} ETH` : '—';
+  document.getElementById('bc-contract-display').textContent = d.contract_address || 'Contract not deployed';
+  if (d.contract_address) document.getElementById('bc-contract-input').value = d.contract_address;
+}
+
+async function deployContract(evt) {
+  const btn = evt?.target || document.activeElement;
+  btn.innerHTML = '<span class="spinner"></span> Deploying...'; btn.disabled = true;
+  const res = await fetch(`${API}/api/blockchain/deploy`, {method:'POST', credentials:'include'});
+  const data = await res.json();
+  alert(res.ok ? `Contract deployed at ${data.address}` : `Error: ${data.error}`);
+  btn.innerHTML = 'Deploy Contract'; btn.disabled = false;
+  loadBlockchainInfo();
+}
+
+async function setContractAddress() {
+  const address = document.getElementById('bc-contract-input').value.trim();
+  const res = await fetch(`${API}/api/blockchain/set_address`, {
+    method:'POST', credentials:'include',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({address})
+  });
+  const data = await res.json();
+  alert(res.ok ? 'Contract address updated' : `Error: ${data.error}`);
+  loadBlockchainInfo();
+}
+
+// ── Evidence Detail Modal ────────────────────────────────────
+async function viewEvidence(id) {
+  document.getElementById('modal-title').textContent = id;
+  document.getElementById('modal-body').innerHTML = '<div class="empty-state"><div class="spinner"></div></div>';
+  document.getElementById('ev-modal').classList.add('open');
+  const res = await fetch(`${API}/api/evidence/${id}`, {credentials:'include'});
+  if (!res.ok) { document.getElementById('modal-body').innerHTML = '<div class="empty-state">Error loading evidence</div>'; return; }
+  const d = await res.json();
+  const e = d.evidence;
+  const bc = d.blockchain || {};
+  document.getElementById('modal-body').innerHTML = `
+    <div class="info-grid" style="margin-bottom:16px">
+      <div class="info-label">Evidence ID</div><div class="info-val mono" style="color:var(--blue)">${escapeHtml(e.evidence_id)}</div>
+      <div class="info-label">File Name</div><div class="info-val">${escapeHtml(e.file_name)}</div>
+      <div class="info-label">Case ID</div><div class="info-val mono">${escapeHtml(e.case_id||'—')}</div>
+      <div class="info-label">File Size</div><div class="info-val">${fmtSize(e.file_size)}</div>
+      <div class="info-label">Status</div><div class="info-val">${statusBadge(e.status)}</div>
+      <div class="info-label">Uploaded By</div><div class="info-val">${escapeHtml(e.uploader_name||'—')}</div>
+      <div class="info-label">Uploaded At</div><div class="info-val mono">${fmtDate(e.created_at)}</div>
+      <div class="info-label">TX Hash</div><div class="info-val mono" style="font-size:10px;word-break:break-all">${escapeHtml(e.tx_hash||'—')}</div>
+      <div class="info-label">SHA-256</div><div class="info-val mono" style="font-size:10px;word-break:break-all">${escapeHtml(e.file_hash)}</div>
+    </div>
+    <div class="divider"></div>
+    <div style="font-size:12px;font-weight:700;margin-bottom:8px">Blockchain Record</div>
+    <div class="info-grid" style="margin-bottom:16px">
+      <div class="info-label">Owner</div><div class="info-val mono" style="font-size:10px">${escapeHtml(bc.owner||'Offline')}</div>
+      <div class="info-label">Block Time</div><div class="info-val mono">${bc.timestamp ? new Date(bc.timestamp*1000).toLocaleString() : '—'}</div>
+    </div>
+    <div class="divider"></div>
+    <div style="font-size:12px;font-weight:700;margin-bottom:8px">Chain of Custody (${d.custody_logs.length} records)</div>
+    <div class="timeline">${d.custody_logs.map((l,i) => `
+      <div class="tl-item">
+        <div class="tl-left">
+          <div class="tl-dot" style="background:${actionColor(l.action)}"></div>
+          ${i < d.custody_logs.length-1 ? '<div class="tl-line"></div>' : ''}
+        </div>
+        <div class="tl-content">
+          <div class="tl-action">${escapeHtml(l.action)}</div>
+          <div class="tl-actor">${escapeHtml(l.actor_name||'System')}</div>
+          ${l.note ? `<div class="tl-note">${escapeHtml(l.note)}</div>` : ''}
+          <div class="tl-time">${fmtDate(l.created_at)}</div>
+        </div>
+      </div>`).join('')}</div>
+    <div class="divider"></div>
+    <div style="display:flex;gap:8px;margin-top:4px">
+      <button class="btn btn-primary btn-sm" onclick="closeModal();document.getElementById('v1-id').value='${e.evidence_id}';showPanel('verify')">Verify Integrity</button>
+      <button class="btn btn-sm" onclick="closeModal();document.getElementById('coc-id').value='${e.evidence_id}';showPanel('custody');loadCustody()">View Custody</button>
+    </div>`;
+}
+
+function closeModal() { document.getElementById('ev-modal').classList.remove('open'); }
+document.getElementById('ev-modal').addEventListener('click', e => { if (e.target === e.currentTarget) closeModal(); });
+
+// ── Users ────────────────────────────────────────────────────
+async function loadUsers() {
+  const res = await fetch(`${API}/api/admin/users`, {credentials:'include'});
+  if (!res.ok) { document.getElementById('users-table-wrap').innerHTML = '<div class="empty-state">Access denied</div>'; return; }
+  const users = await res.json();
+  document.getElementById('users-table-wrap').innerHTML = `<table><thead><tr>
+    <th>Name</th><th>Email</th><th>Role</th><th>Registered</th>
+  </tr></thead><tbody>${users.map(u => `<tr>
+    <td>${escapeHtml(u.name)}</td>
+    <td class="mono" style="font-size:11px">${escapeHtml(u.email)}</td>
+    <td>${roleBadge(u.role)}</td>
+    <td class="mono" style="font-size:10px;color:var(--text3)">${fmtDate(u.created_at)}</td>
+  </tr>`).join('')}</tbody></table>`;
+}
+
+// ── Helpers ──────────────────────────────────────────────────
+function showAlert(id, msg) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.textContent = msg; el.style.display = 'block';
+  setTimeout(() => el.style.display = 'none', 4000);
+}
+
+function fmtDate(d) {
+  if (!d) return '—';
+  return new Date(d).toLocaleString('en-IN', {dateStyle:'short', timeStyle:'short'});
+}
+
+function fmtSize(n) {
+  if (!n) return '—';
+  if (n < 1024) return n + ' B';
+  if (n < 1048576) return (n/1024).toFixed(1) + ' KB';
+  return (n/1048576).toFixed(2) + ' MB';
+}
+
+function escapeHtml(value) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function escapeAttr(value) {
+  return escapeHtml(value).replace(/`/g, '&#96;');
+}
+
+function statusBadge(s) {
+  const map = {active:'info',verified:'ok',tampered:'err',pending:'warn'};
+  return `<span class="badge badge-${map[s]||'info'}">${escapeHtml(s||'active')}</span>`;
+}
+
+function roleBadge(r) {
+  const map = {admin:'purple',investigator:'info',analyst:'ok',court_authority:'warn'};
+  return `<span class="badge badge-${map[r]||'info'}">${escapeHtml(String(r || '').replace('_',' '))}</span>`;
+}
+
+function actionColor(a) {
+  const c = {Collected:'#34d399',Analyzed:'#4f8ef7',Transferred:'#fbbf24',
+    Verified:'#34d399',Presented:'#a78bfa',Stored:'#8892a4',
+    Released:'#fbbf24','Tamper Detected':'#f87171'};
+  return c[a] || '#8892a4';
+}
+
+init();
+</script>
+</body>
+</html>

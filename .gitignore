@@ -1,0 +1,6 @@
+.env
+__pycache__/
+*.db
+evidence_storage/
+venv/
+*.pyc
