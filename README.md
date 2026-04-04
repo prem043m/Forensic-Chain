@@ -204,6 +204,11 @@ All endpoints require session authentication (login first).
 | POST | `/api/blockchain/deploy` | Deploy contract (admin) |
 | POST | `/api/blockchain/set_address` | Set contract address (admin) |
 
+### Health
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/health` | Deployment health check (DB connectivity + blockchain flag) |
+
 ---
 
 ## User Roles

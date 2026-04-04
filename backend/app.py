@@ -10,10 +10,10 @@ from flask_cors import CORS
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
 
-try:
+if __package__:
     from . import database as db
     from .blockchain import blockchain
-except ImportError:
+else:
     import database as db
     from blockchain import blockchain
 
@@ -34,8 +34,15 @@ ALLOWED_EXTENSIONS = {
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
 # ── Init ───────────────────────────────────────────────────────────────────
-db.init_db()
-blockchain.connect()
+try:
+    db.init_db()
+except Exception:
+    app.logger.exception("Database initialization failed. Check DATABASE_URL and PostgreSQL availability.")
+
+try:
+    blockchain.connect()
+except Exception:
+    app.logger.exception("Blockchain initialization failed. App will continue in degraded mode.")
 
 
 # ── Helpers ────────────────────────────────────────────────────────────────
@@ -89,6 +96,35 @@ def index():
 @app.route("/<path:filename>")
 def static_files(filename):
     return send_from_directory("../frontend", filename)
+
+
+@app.route("/health", methods=["GET"])
+def health():
+    db_ok = False
+    db_error = None
+
+    conn = None
+    try:
+        conn = db.get_db()
+        cursor = conn.cursor()
+        cursor.execute("SELECT 1")
+        cursor.fetchone()
+        db_ok = True
+    except Exception as exc:
+        db_error = str(exc)
+    finally:
+        if conn is not None:
+            conn.close()
+
+    payload = {
+        "status": "ok" if db_ok else "degraded",
+        "database": "ok" if db_ok else "error",
+        "blockchain_connected": bool(blockchain.is_connected),
+    }
+    if db_error:
+        payload["database_error"] = db_error
+
+    return jsonify(payload), 200 if db_ok else 503
 
 
 # ── Auth API ───────────────────────────────────────────────────────────────
