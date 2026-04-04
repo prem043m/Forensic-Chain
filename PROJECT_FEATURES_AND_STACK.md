@@ -1,12 +1,12 @@
 # ForensicChain Project Overview
 
 ## What It Does
-ForensicChain is a blockchain-backed digital evidence management system. It lets authenticated users upload evidence files, compute SHA-256 hashes, record evidence metadata on Ethereum/Ganache, verify file integrity later, and maintain a chain-of-custody log in SQLite.
+ForensicChain is a blockchain-backed digital evidence management system. It lets authenticated users upload evidence files, compute SHA-256 hashes, record evidence metadata on Ethereum/Ganache, verify file integrity later, and maintain a chain-of-custody log in PostgreSQL.
 
 ## Tech Stack And What Each Part Is Used For
 - Flask in backend/app.py for the HTTP API, session auth, and serving the frontend pages.
 - Web3.py in backend/blockchain.py for Ganache/Ethereum connectivity, contract calls, and network status.
-- SQLite in backend/database.py for users, evidence metadata, and custody logs.
+- PostgreSQL in backend/database.py for users, evidence metadata, and custody logs.
 - Solidity in contracts/Evidence.sol for on-chain evidence registration and custody history.
 - py-solc-x in migrations/deploy.py for compiling and deploying the smart contract.
 - HTML, CSS, and vanilla JavaScript in frontend/index.html and frontend/dashboard.html for login, upload, verification, custody, and admin views.
@@ -34,7 +34,7 @@ ForensicChain is a blockchain-backed digital evidence management system. It lets
 
 ## High-Level Architecture
 1. The browser sends requests to the Flask API.
-2. Flask stores users and metadata in SQLite.
+2. Flask stores users and metadata in PostgreSQL.
 3. Evidence files are written to evidence_storage/.
 4. The blockchain layer records hashes and custody events on-chain when available.
 5. The dashboard reads both database data and blockchain data to show integrity status.

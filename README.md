@@ -17,9 +17,9 @@ forensic-blockchain/
 ├── backend/
 │   ├── app.py                  # Flask REST API (main entry point)
 │   ├── blockchain.py           # Web3.py blockchain interaction layer
-│   ├── database.py             # SQLite database helpers
+│   ├── database.py             # PostgreSQL database helpers
 │   ├── requirements.txt        # Python dependencies
-│   └── forensic.db             # SQLite DB (auto-created on first run)
+│   └── contract_address.txt    # Deployed contract address
 │
 ├── frontend/
 │   ├── index.html              # Login / Register page
@@ -114,7 +114,7 @@ python app.py
 Server starts at: **http://localhost:5000**
 
 On first run it will:
-- Create `forensic.db` (SQLite database)
+- Connect to PostgreSQL using `DATABASE_URL`
 - Create all tables
 - Seed a default admin account
 
@@ -245,7 +245,7 @@ evidenceExists(evidenceId) → bool
 
 If Ganache is not running, the system operates in **offline mode**:
 - Evidence files are still uploaded and hashed
-- Metadata is saved to SQLite
+- Metadata is saved to PostgreSQL
 - TX hashes are prefixed with `OFFLINE-`
 - Verification compares against the DB hash (not blockchain)
 
@@ -258,12 +258,14 @@ while blockchain verification remains available when Ganache is connected.
 
 | Variable | Default | Description |
 |----------|---------|-------------|
+| `DATABASE_URL` | `postgresql://postgres:postgres@localhost:5432/forensic_chain` | PostgreSQL connection URL |
 | `GANACHE_URL` | `http://127.0.0.1:7545` | Ganache RPC endpoint |
 | `SECRET_KEY` | `forensic-chain-secret-2024` | Flask session secret |
 
 Set them before running:
 ```bash
 export GANACHE_URL=http://127.0.0.1:7545
+export DATABASE_URL=postgresql://postgres:postgres@localhost:5432/forensic_chain
 export SECRET_KEY=your-secure-secret
 python backend/app.py
 ```
@@ -278,7 +280,7 @@ python backend/app.py
 | Smart Contract | Solidity 0.8.0 |
 | Backend | Python 3.9+, Flask 3.0 |
 | Blockchain SDK | Web3.py 6.x |
-| Database | SQLite (via Python sqlite3) |
+| Database | PostgreSQL (via psycopg2) |
 | Frontend | HTML5, CSS3, Vanilla JavaScript |
 | Hashing | SHA-256 (hashlib) |
 | Auth | Flask sessions + Werkzeug password hashing |
@@ -286,6 +288,14 @@ python backend/app.py
 ---
 
 ## Common Issues
+
+## Common Mistakes (Avoid These)
+
+- Forgetting `conn.commit()` after INSERT/UPDATE/DELETE operations.
+- Not setting `DATABASE_URL` in environment or `.env`.
+- Leaving old SQLite code paths in `backend/database.py`.
+- Using an invalid PostgreSQL connection string format.
+- Not installing `psycopg2-binary` in the active environment.
 
 **"Cannot connect to Ganache"**
 - Make sure Ganache Desktop is open with a Quickstart workspace
