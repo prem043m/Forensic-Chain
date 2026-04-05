@@ -1,0 +1,10 @@
+Flask==3.0.0
+Flask-Cors==4.0.0
+gunicorn==25.3.0
+py-solc-x==2.0.5
+web3==6.15.1
+Werkzeug==3.0.1
+python-dotenv==1.0.1
+psycopg2-binary==2.9.11
+PyJWT==2.8.1
+bcrypt==4.1.1

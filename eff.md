@@ -20,6 +20,51 @@
 
 ### 1. **Email Authentication & Notifications**
 
+### 0. **JWT Token Authentication** ⭐ NEW
+
+- JWT (JSON Web Tokens) for stateless API authentication
+- Supports both Bearer token and session-based auth
+- Tokens include `user_id` and `role` claims
+- Auto-expiration based on `JWT_EXPIRATION_HOURS` (default: 8 hours)
+- Token refresh endpoint available
+- **Endpoints**:
+    - `POST /api/auth/validate-token` — Validate token + get user info
+    - `POST /api/auth/refresh-token` — Generate new token
+- **Usage**: Include in header: `Authorization: Bearer <token>`
+
+### 5. **Session Timeout Management** ⭐ ENHANCED
+
+- Session timeout: **8 hours** (configurable via `PERMANENT_SESSION_LIFETIME`)
+- `SESSION_COOKIE_HTTPONLY=true` — Prevents JavaScript access to cookies
+- `SESSION_COOKIE_SAMESITE=Lax` — CSRF protection
+- `SESSION_COOKIE_SECURE=false` — Set to `true` in production with HTTPS
+- Sessions automatically tracked with `last_login` timestamp
+- **Configuration**:
+    ```env
+    PERMANENT_SESSION_LIFETIME=28800  # 8 hours in seconds
+    JWT_EXPIRATION_HOURS=8
+    ```
+
+
+### 6. **Role-Based Access Control (RBAC) Middleware** ⭐ ENHANCED
+
+- **Session-based RBAC**: `@role_required("admin")` decorator
+- **JWT-based RBAC**: `@jwt_role_required("admin")` decorator
+- Four roles with different permissions:
+    - `admin` — Full system access, user management, contract deployment
+    - `investigator` — Upload evidence, transfer custody, view all
+    - `analyst` — View and verify evidence
+    - `court_authority` — View evidence and custody chain (read-only)
+- Automatic route protection and permission checking
+- Returns HTTP 403 if user lacks required role
+### 0.5 **Enhanced Password Security** ⭐ NEW
+
+- Bcrypt password hashing (12 rounds) instead of Werkzeug weak hashing
+- Automatic fallback to Werkzeug for compatibility
+- Backward compatible with existing hashed passwords
+- Stronger password strength validation (12+ chars, uppercase, lowercase, number, symbol)
+- Password verification works with both bcrypt and Werkzeug formats
+
 #### Password Reset via Email
 - Users can request password reset from login page
 - Email link with secure token expires in 1 hour
@@ -134,6 +179,8 @@ ADMIN_NAME=Prem Kamble
 | POST | `/api/auth/reset-password` | Confirm password reset with token |
 | GET | `/api/auth/me` | Get current user info |
 
+| POST | `/api/auth/validate-token` | Validate JWT token (requires Bearer token) |
+| POST | `/api/auth/refresh-token` | Refresh JWT token (get new token) |
 ### Evidence Endpoints
 | Method | Endpoint | Description |
 |--------|----------|-------------|
@@ -297,3 +344,64 @@ py-solc-x==2.0.5
 
 **Last Updated:** April 5, 2026  
 **Version:** 2.1 (With Email & Password Recovery)
+
+---
+
+## 🔐 Security Features Checklist (Complete)
+
+✅ **JWT Token Authentication** — Stateless API auth with Bearer tokens  
+✅ **Session Timeout** — 8 hours default, configurable  
+✅ **Password Hashing** — Bcrypt 12 rounds (with Werkzeug fallback)  
+✅ **Role-Based Middleware** — Session + JWT role protection  
+✅ **Email Verification** — Login notifications + password reset  
+✅ **Password Confirmation** — Prevent registration typos  
+✅ **Token Validation Endpoint** — Check token validity  
+✅ **Token Refresh Endpoint** — Generate new tokens  
+✅ **Security Headers** — HttpOnly + SameSite cookies  
+✅ **Strong Password Policy** — 12+ chars, mixed case, numbers, symbols  
+
+---
+
+## 🛠️ How to Use JWT Tokens
+
+### 1. Login and Get Token
+```javascript
+const response = await fetch('/api/auth/login', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({email, password})
+});
+
+const {token, expires_in} = await response.json();
+localStorage.setItem('token', token);  // Save token
+```
+
+### 2. Use Token in Requests
+```javascript
+const token = localStorage.getItem('token');
+fetch('/api/evidence', {
+    headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+    }
+});
+```
+
+### 3. Validate Token
+```javascript
+const isValid = await fetch('/api/auth/validate-token', {
+    method: 'POST',
+    headers: {'Authorization': `Bearer ${token}`}
+});
+```
+
+### 4. Refresh Expired Token
+```javascript
+const newTokenResponse = await fetch('/api/auth/refresh-token', {
+    method: 'POST',
+    headers: {'Authorization': `Bearer ${oldToken}`}
+});
+
+const {token} = await newTokenResponse.json();
+localStorage.setItem('token', token);  // Update token
+```

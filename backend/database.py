@@ -50,6 +50,8 @@ def init_db():
             password_reset_token VARCHAR(255),
             password_reset_expiry TIMESTAMP,
             last_login TIMESTAMP,
+            is_active BOOLEAN NOT NULL DEFAULT TRUE,
+            disabled_at TIMESTAMP,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
     """)
@@ -80,6 +82,11 @@ def init_db():
     """)
 
     cursor.execute("""
+        CREATE INDEX IF NOT EXISTS evidence_file_hash_idx
+        ON evidence (file_hash);
+    """)
+
+    cursor.execute("""
         CREATE TABLE IF NOT EXISTS custody_logs (
             id SERIAL PRIMARY KEY,
             evidence_id VARCHAR(64) NOT NULL,
@@ -103,6 +110,8 @@ def init_db():
     safe_alter_table("password_reset_token", "VARCHAR(255)")
     safe_alter_table("password_reset_expiry", "TIMESTAMP")
     safe_alter_table("last_login", "TIMESTAMP")
+    safe_alter_table("is_active", "BOOLEAN NOT NULL DEFAULT TRUE")
+    safe_alter_table("disabled_at", "TIMESTAMP")
 
     # Seed one private admin user if not exists and credentials are provided.
     from werkzeug.security import generate_password_hash
@@ -165,10 +174,53 @@ def get_user_by_id(user_id):
 def get_all_users():
     conn = get_db()
     cursor = conn.cursor()
-    cursor.execute("SELECT id, name, email, role, created_at FROM users")
+    cursor.execute("SELECT id, name, email, role, is_active, last_login, disabled_at, created_at FROM users ORDER BY created_at DESC")
     users = cursor.fetchall()
     conn.close()
     return users
+
+
+def set_user_active(user_id, is_active):
+    conn = get_db()
+    try:
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            UPDATE users
+            SET is_active = %s,
+                disabled_at = CASE WHEN %s THEN NULL ELSE CURRENT_TIMESTAMP END
+            WHERE id = %s
+            """,
+            (is_active, is_active, user_id),
+        )
+        conn.commit()
+        return cursor.rowcount > 0
+    finally:
+        conn.close()
+
+
+def can_delete_user(user_id):
+    conn = get_db()
+    try:
+        cursor = conn.cursor()
+        cursor.execute("SELECT COUNT(*) as c FROM evidence WHERE uploaded_by = %s", (user_id,))
+        evidence_count = cursor.fetchone()["c"]
+        cursor.execute("SELECT COUNT(*) as c FROM custody_logs WHERE user_id = %s", (user_id,))
+        logs_count = cursor.fetchone()["c"]
+        return evidence_count == 0 and logs_count == 0, evidence_count, logs_count
+    finally:
+        conn.close()
+
+
+def delete_user(user_id):
+    conn = get_db()
+    try:
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM users WHERE id = %s", (user_id,))
+        conn.commit()
+        return cursor.rowcount > 0
+    finally:
+        conn.close()
 
 
 # ── Evidence ───────────────────────────────────────────────────────────────
@@ -211,6 +263,22 @@ def get_evidence_by_id(evidence_id):
         LEFT JOIN users u ON e.uploaded_by = u.id
         WHERE e.evidence_id = %s
     """, (evidence_id,))
+    row = cursor.fetchone()
+    conn.close()
+    return row if row else None
+
+
+def get_evidence_by_hash(file_hash):
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT e.*, u.name as uploader_name
+        FROM evidence e
+        LEFT JOIN users u ON e.uploaded_by = u.id
+        WHERE e.file_hash = %s
+        ORDER BY e.created_at DESC
+        LIMIT 1
+    """, (file_hash,))
     row = cursor.fetchone()
     conn.close()
     return row if row else None
@@ -279,6 +347,10 @@ def get_stats():
     tampered = cursor.fetchone()["c"]
     cursor.execute("SELECT COUNT(*) as c FROM users")
     users = cursor.fetchone()["c"]
+    cursor.execute("SELECT COUNT(*) as c FROM users WHERE is_active = TRUE")
+    active_users = cursor.fetchone()["c"]
+    cursor.execute("SELECT COUNT(*) as c FROM users WHERE is_active = FALSE")
+    disabled_users = cursor.fetchone()["c"]
     cursor.execute("SELECT COUNT(*) as c FROM custody_logs")
     logs = cursor.fetchone()["c"]
     conn.close()
@@ -287,8 +359,115 @@ def get_stats():
         "verified": verified,
         "tampered": tampered,
         "total_users": users,
+        "active_users": active_users,
+        "disabled_users": disabled_users,
         "total_logs": logs
     }
+
+
+def get_user_stats(user_id):
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT COUNT(*) as c FROM evidence WHERE uploaded_by = %s", (user_id,))
+    total = cursor.fetchone()["c"]
+    cursor.execute("SELECT COUNT(*) as c FROM evidence WHERE uploaded_by = %s AND status='verified'", (user_id,))
+    verified = cursor.fetchone()["c"]
+    cursor.execute("SELECT COUNT(*) as c FROM evidence WHERE uploaded_by = %s AND status='tampered'", (user_id,))
+    tampered = cursor.fetchone()["c"]
+    cursor.execute("SELECT COUNT(*) as c FROM custody_logs WHERE user_id = %s", (user_id,))
+    logs = cursor.fetchone()["c"]
+    conn.close()
+    return {
+        "total_evidence": total,
+        "verified": verified,
+        "tampered": tampered,
+        "total_users": None,
+        "total_logs": logs,
+    }
+
+
+def get_recent_activity(limit=20, user_id=None):
+    conn = get_db()
+    cursor = conn.cursor()
+    if user_id is None:
+        cursor.execute(
+            """
+            SELECT cl.*, u.name as actor_name, u.role as actor_role
+            FROM custody_logs cl
+            LEFT JOIN users u ON cl.user_id = u.id
+            ORDER BY cl.created_at DESC
+            LIMIT %s
+            """,
+            (limit,),
+        )
+    else:
+        cursor.execute(
+            """
+            SELECT cl.*, u.name as actor_name, u.role as actor_role
+            FROM custody_logs cl
+            LEFT JOIN users u ON cl.user_id = u.id
+            WHERE cl.user_id = %s
+            ORDER BY cl.created_at DESC
+            LIMIT %s
+            """,
+            (user_id, limit),
+        )
+    rows = cursor.fetchall()
+    conn.close()
+    return rows
+
+
+def get_suspicious_activity(limit=50):
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute(
+        """
+        SELECT * FROM (
+            SELECT
+                'tampered_evidence' AS type,
+                e.evidence_id,
+                COALESCE(u.name, 'Unknown') AS actor_name,
+                COALESCE(u.role, 'unknown') AS actor_role,
+                'Evidence status marked as tampered' AS details,
+                e.created_at AS created_at
+            FROM evidence e
+            LEFT JOIN users u ON e.uploaded_by = u.id
+            WHERE e.status = 'tampered'
+
+            UNION ALL
+
+            SELECT
+                'tamper_detected_log' AS type,
+                cl.evidence_id,
+                COALESCE(u.name, 'Unknown') AS actor_name,
+                COALESCE(u.role, 'unknown') AS actor_role,
+                COALESCE(cl.note, cl.action) AS details,
+                cl.created_at AS created_at
+            FROM custody_logs cl
+            LEFT JOIN users u ON cl.user_id = u.id
+            WHERE cl.action = 'Tamper Detected'
+
+            UNION ALL
+
+            SELECT
+                'offline_blockchain_fallback' AS type,
+                cl.evidence_id,
+                COALESCE(u.name, 'Unknown') AS actor_name,
+                COALESCE(u.role, 'unknown') AS actor_role,
+                'Blockchain offline fallback transaction recorded' AS details,
+                cl.created_at AS created_at
+            FROM custody_logs cl
+            LEFT JOIN users u ON cl.user_id = u.id
+            WHERE cl.tx_hash LIKE 'OFFLINE-%'
+        ) suspicious
+        ORDER BY created_at DESC
+        LIMIT %s
+        """,
+        (limit,),
+    )
+    rows = cursor.fetchall()
+    conn.close()
+    return rows
 
 
 # ── Password Reset & Security ──────────────────────────────────────────────

@@ -178,6 +178,23 @@ class BlockchainManager:
         tx_hash = self.w3.eth.send_raw_transaction(signed_tx.raw_transaction)
         return self.w3.eth.wait_for_transaction_receipt(tx_hash)
 
+    def _receipt_to_tx_meta(self, receipt):
+        tx_hash = receipt.transactionHash.hex()
+        block_number = receipt.blockNumber
+        block_ts = None
+        try:
+            block = self.w3.eth.get_block(block_number)
+            block_ts = int(block.timestamp)
+        except Exception:
+            block_ts = None
+
+        return {
+            "tx_hash": tx_hash,
+            "block_number": block_number,
+            "timestamp": block_ts,
+            "status": "confirmed" if getattr(receipt, "status", 0) == 1 else "failed",
+        }
+
     def deploy_contract(self):
         """Deploy contract to the configured network. Returns contract address."""
         if not self.w3 or not self.w3.is_connected():
@@ -269,7 +286,7 @@ class BlockchainManager:
                 "chainId": self.w3.eth.chain_id,
             })
             receipt = self._sign_and_send(tx)
-            return receipt.transactionHash.hex(), None
+            return self._receipt_to_tx_meta(receipt), None
         except Exception as e:
             return None, str(e)
 
@@ -289,7 +306,29 @@ class BlockchainManager:
                 "chainId": self.w3.eth.chain_id,
             })
             receipt = self._sign_and_send(tx)
-            return receipt.transactionHash.hex(), None
+            return self._receipt_to_tx_meta(receipt), None
+        except Exception as e:
+            return None, str(e)
+
+    def get_transaction_info(self, tx_hash):
+        if not tx_hash:
+            return None, "Missing transaction hash"
+        if tx_hash.startswith("OFFLINE-"):
+            return {
+                "tx_hash": tx_hash,
+                "block_number": None,
+                "timestamp": None,
+                "status": "offline",
+                "source": "fallback",
+            }, None
+        if not self._connected or not self.w3:
+            return None, "Blockchain not connected"
+
+        try:
+            receipt = self.w3.eth.get_transaction_receipt(tx_hash)
+            meta = self._receipt_to_tx_meta(receipt)
+            meta["source"] = "blockchain"
+            return meta, None
         except Exception as e:
             return None, str(e)
 
