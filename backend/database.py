@@ -12,10 +12,19 @@ DATABASE_URL = os.getenv(
     "DATABASE_URL",
     "postgresql://postgres:postgres@localhost:5432/forensic_chain"
 )
+ADMIN_NAME = os.getenv("ADMIN_NAME", "System Admin")
+ADMIN_EMAIL = os.getenv("ADMIN_EMAIL")
+ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD")
 
 # Some providers export postgres://, psycopg2 expects postgresql://
 if DATABASE_URL.startswith("postgres://"):
     DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
+
+if DATABASE_URL.startswith("sqlite://"):
+    raise ValueError(
+        "Invalid DATABASE_URL for PostgreSQL mode. Received SQLite DSN. "
+        "Set DATABASE_URL to a postgresql:// connection string."
+    )
 
 
 def get_db():
@@ -36,6 +45,13 @@ def init_db():
             wallet_address VARCHAR(255),
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
+    """)
+
+    # Enforce exactly one admin account at database level.
+    cursor.execute("""
+        CREATE UNIQUE INDEX IF NOT EXISTS users_single_admin_idx
+        ON users ((role))
+        WHERE role = 'admin';
     """)
 
     cursor.execute("""
@@ -69,20 +85,22 @@ def init_db():
         );
     """)
 
-    # Seed admin user if not exists
+    # Seed one private admin user if not exists and credentials are provided.
     from werkzeug.security import generate_password_hash
-    cursor.execute("SELECT id FROM users WHERE email = 'admin@forensic.gov'")
-    if not cursor.fetchone():
+    cursor.execute("SELECT id FROM users WHERE role = 'admin' LIMIT 1")
+    if not cursor.fetchone() and ADMIN_EMAIL and ADMIN_PASSWORD:
         cursor.execute("""
             INSERT INTO users (name, email, password, role, wallet_address)
             VALUES (%s, %s, %s, %s, %s)
         """, (
-            "System Admin",
-            "admin@forensic.gov",
-            generate_password_hash("admin123"),
+            ADMIN_NAME,
+            ADMIN_EMAIL,
+            generate_password_hash(ADMIN_PASSWORD),
             "admin",
             ""
         ))
+    elif not ADMIN_EMAIL or not ADMIN_PASSWORD:
+        print("[DB] Admin user not auto-created. Set ADMIN_EMAIL and ADMIN_PASSWORD in environment.")
 
     conn.commit()
     conn.close()

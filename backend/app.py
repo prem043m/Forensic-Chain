@@ -34,10 +34,14 @@ ALLOWED_EXTENSIONS = {
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
 # ── Init ───────────────────────────────────────────────────────────────────
+REQUIRE_DB = os.environ.get("REQUIRE_DB", "true").lower() == "true"
+
 try:
     db.init_db()
 except Exception:
     app.logger.exception("Database initialization failed. Check DATABASE_URL and PostgreSQL availability.")
+    if REQUIRE_DB:
+        raise
 
 try:
     blockchain.connect()
@@ -61,6 +65,16 @@ def generate_file_hash(file_path):
 
 def generate_hash_from_bytes(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
+
+
+def is_strong_password(password: str) -> bool:
+    if len(password) < 12:
+        return False
+    has_upper = any(c.isupper() for c in password)
+    has_lower = any(c.islower() for c in password)
+    has_digit = any(c.isdigit() for c in password)
+    has_symbol = any(not c.isalnum() for c in password)
+    return has_upper and has_lower and has_digit and has_symbol
 
 
 def login_required(f):
@@ -140,12 +154,14 @@ def register():
 
     valid_roles = ["investigator", "analyst", "court_authority"]
     if data["role"] == "admin":
-        current_user = db.get_user_by_id(session["user_id"]) if "user_id" in session else None
-        if not current_user or current_user["role"] != "admin":
-            return jsonify({"error": "Admin accounts can only be created by an existing admin"}), 403
-        valid_roles.append("admin")
+        return jsonify({"error": "Admin registration is disabled. Configure one private admin via environment variables."}), 403
     if data["role"] not in valid_roles:
         return jsonify({"error": "Invalid role"}), 400
+
+    if not is_strong_password(data["password"]):
+        return jsonify({
+            "error": "Password must be at least 12 characters and include uppercase, lowercase, number, and symbol"
+        }), 400
 
     hashed = generate_password_hash(data["password"])
     success = db.create_user(

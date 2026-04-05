@@ -116,7 +116,7 @@ Server starts at: **http://localhost:5000**
 On first run it will:
 - Connect to PostgreSQL using `DATABASE_URL`
 - Create all tables
-- Seed a default admin account
+- Seed one private admin account only when `ADMIN_EMAIL` and `ADMIN_PASSWORD` are set
 
 ---
 
@@ -124,11 +124,18 @@ On first run it will:
 
 Open your browser to: **http://localhost:5000**
 
-### Default Admin Login
-| Field | Value |
-|-------|-------|
-| Email | `admin@forensic.gov` |
-| Password | `admin123` |
+### Private Admin Setup
+Set a private admin identity in environment variables before first run:
+
+| Variable | Description |
+|----------|-------------|
+| `ADMIN_NAME` | Admin display name (optional, default: `System Admin`) |
+| `ADMIN_EMAIL` | Private admin login email |
+| `ADMIN_PASSWORD` | Private admin password |
+
+Notes:
+- Only one admin account is allowed.
+- Admin registration from the public register API is disabled.
 
 ---
 
@@ -264,6 +271,9 @@ while blockchain verification remains available when Ganache is connected.
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `DATABASE_URL` | `postgresql://postgres:postgres@localhost:5432/forensic_chain` | PostgreSQL connection URL |
+| `ADMIN_NAME` | `System Admin` | Optional private admin display name |
+| `ADMIN_EMAIL` | (none) | Private admin login email used for first admin seed |
+| `ADMIN_PASSWORD` | (none) | Private admin password used for first admin seed |
 | `GANACHE_URL` | `http://127.0.0.1:7545` | Ganache RPC endpoint |
 | `SECRET_KEY` | `forensic-chain-secret-2024` | Flask session secret |
 
@@ -271,6 +281,9 @@ Set them before running:
 ```bash
 export GANACHE_URL=http://127.0.0.1:7545
 export DATABASE_URL=postgresql://postgres:postgres@localhost:5432/forensic_chain
+export ADMIN_NAME="Forensic Root"
+export ADMIN_EMAIL=private-admin@agency.gov
+export ADMIN_PASSWORD='ChangeThisToAStrongOne!'
 export SECRET_KEY=your-secure-secret
 python backend/app.py
 ```
