@@ -8,10 +8,14 @@ from psycopg2.extras import RealDictCursor
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 load_dotenv(PROJECT_ROOT / ".env")
 
-DATABASE_URL = os.getenv(
-    "DATABASE_URL",
-    "postgresql://postgres:postgres@localhost:5432/forensic_chain"
-)
+DATABASE_URL = os.getenv("DATABASE_URL")
+
+if not DATABASE_URL:
+    raise ValueError("DATABASE_URL not set")
+
+DATABASE_URL = DATABASE_URL.strip()
+
+print("Using DB:", DATABASE_URL)
 ADMIN_NAME = os.getenv("ADMIN_NAME", "System Admin")
 ADMIN_EMAIL = os.getenv("ADMIN_EMAIL")
 ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD")
