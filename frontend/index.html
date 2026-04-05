@@ -199,6 +199,7 @@
     <div class="tabs">
       <button class="tab-btn active" onclick="switchTab('login')">Sign In</button>
       <button class="tab-btn" onclick="switchTab('register')">Register</button>
+      <button class="tab-btn" onclick="switchTab('forgot')">Forgot Password</button>
     </div>
 
     <!-- Login Panel -->
@@ -232,6 +233,10 @@
         <input type="password" id="reg-pass" placeholder="Min 12 chars with upper/lower/number/symbol">
       </div>
       <div class="form-group">
+        <label>Confirm Password</label>
+        <input type="password" id="reg-pass-confirm" placeholder="Re-enter your password">
+      </div>
+      <div class="form-group">
         <label>Role</label>
         <select id="reg-role">
           <option value="investigator">Investigator</option>
@@ -245,6 +250,21 @@
       </div>
       <button class="btn" onclick="doRegister()">Create Account</button>
     </div>
+
+    <!-- Forgot Password Panel -->
+    <div class="panel" id="panel-forgot">
+      <div class="alert alert-err" id="forgot-err"></div>
+      <div class="alert alert-ok" id="forgot-ok"></div>
+      <p style="color: var(--text2); font-size: 13px; margin-bottom: 16px;">Enter your email address and we'll send you a link to reset your password.</p>
+      <div class="form-group">
+        <label>Email</label>
+        <input type="email" id="forgot-email" placeholder="your@email.com">
+      </div>
+      <button class="btn" onclick="doForgotPassword()">Send Reset Link</button>
+      <p style="text-align: center; margin-top: 15px;">
+        <a href="#" onclick="switchTab('login'); return false;" style="color: var(--blue); text-decoration: none; font-size: 12px;">Back to Sign In</a>
+      </p>
+    </div>
   </div>
 
   <div class="nodes">
@@ -256,9 +276,12 @@
 
 <script>
 function switchTab(tab) {
-  document.querySelectorAll('.tab-btn').forEach((b,i) => b.classList.toggle('active', (tab==='login'?0:1)===i));
+  const tabs = {'login': 0, 'register': 1, 'forgot': 2};
+  const tabIndex = tabs[tab] || 0;
+  document.querySelectorAll('.tab-btn').forEach((b,i) => b.classList.toggle('active', tabIndex===i));
   document.getElementById('panel-login').classList.toggle('active', tab==='login');
   document.getElementById('panel-register').classList.toggle('active', tab==='register');
+  document.getElementById('panel-forgot').classList.toggle('active', tab==='forgot');
 }
 
 function showAlert(id, msg) {
@@ -290,16 +313,18 @@ async function doRegister() {
   const name = document.getElementById('reg-name').value.trim();
   const email = document.getElementById('reg-email').value.trim();
   const password = document.getElementById('reg-pass').value;
+  const password_confirm = document.getElementById('reg-pass-confirm').value;
   const role = document.getElementById('reg-role').value;
   const wallet_address = document.getElementById('reg-wallet').value.trim();
 
-  if (!name || !email || !password) return showAlert('reg-err', 'Fill in all required fields');
+  if (!name || !email || !password || !password_confirm) return showAlert('reg-err', 'Fill in all required fields');
+  if (password !== password_confirm) return showAlert('reg-err', 'Passwords do not match');
   if (password.length < 12) return showAlert('reg-err', 'Password must be at least 12 characters');
 
   const res = await fetch('/api/auth/register', {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({name, email, password, role, wallet_address})
+    body: JSON.stringify({name, email, password, password_confirm, role, wallet_address})
   });
   const data = await res.json();
   if (res.ok) {
@@ -307,6 +332,24 @@ async function doRegister() {
     setTimeout(() => switchTab('login'), 1500);
   } else {
     showAlert('reg-err', data.error || 'Registration failed');
+  }
+}
+
+async function doForgotPassword() {
+  const email = document.getElementById('forgot-email').value.trim();
+  if (!email) return showAlert('forgot-err', 'Enter your email address');
+
+  const res = await fetch('/api/auth/forgot-password', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({email})
+  });
+  const data = await res.json();
+  if (res.ok) {
+    showAlert('forgot-ok', 'Reset link sent! Check your email.');
+    document.getElementById('forgot-email').value = '';
+  } else {
+    showAlert('forgot-err', data.error || 'Failed to send reset link');
   }
 }
 
