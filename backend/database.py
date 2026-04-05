@@ -47,6 +47,9 @@ def init_db():
             password TEXT NOT NULL,
             role VARCHAR(50) NOT NULL DEFAULT 'investigator',
             wallet_address VARCHAR(255),
+            password_reset_token VARCHAR(255),
+            password_reset_expiry TIMESTAMP,
+            last_login TIMESTAMP,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
     """)
@@ -88,6 +91,18 @@ def init_db():
             FOREIGN KEY (user_id) REFERENCES users(id)
         );
     """)
+
+    # Migration: Add new columns if they don't exist (for existing databases)
+    def safe_alter_table(col_name, col_def):
+        try:
+            cursor.execute(f"ALTER TABLE users ADD COLUMN {col_name} {col_def}")
+            conn.commit()
+        except psycopg2.Error:
+            conn.rollback()  # Rollback failed ALTER statement
+    
+    safe_alter_table("password_reset_token", "VARCHAR(255)")
+    safe_alter_table("password_reset_expiry", "TIMESTAMP")
+    safe_alter_table("last_login", "TIMESTAMP")
 
     # Seed one private admin user if not exists and credentials are provided.
     from werkzeug.security import generate_password_hash
@@ -274,3 +289,73 @@ def get_stats():
         "total_users": users,
         "total_logs": logs
     }
+
+
+# ── Password Reset & Security ──────────────────────────────────────────────
+
+def set_password_reset_token(email, token, expiry_hours=1):
+    """Set password reset token for user"""
+    conn = get_db()
+    try:
+        cursor = conn.cursor()
+        from datetime import datetime, timedelta
+        expiry = datetime.now() + timedelta(hours=expiry_hours)
+        cursor.execute("""
+            UPDATE users SET password_reset_token = %s, password_reset_expiry = %s
+            WHERE email = %s
+        """, (token, expiry, email))
+        conn.commit()
+        return cursor.rowcount > 0
+    finally:
+        conn.close()
+
+
+def verify_reset_token(email, token):
+    """Verify password reset token is valid"""
+    from datetime import datetime
+    conn = get_db()
+    try:
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT id FROM users 
+            WHERE email = %s AND password_reset_token = %s 
+            AND password_reset_expiry > %s
+        """, (email, token, datetime.now()))
+        return cursor.fetchone() is not None
+    finally:
+        conn.close()
+
+
+def reset_password(email, new_password_hash):
+    """Reset user password and clear reset token"""
+    conn = get_db()
+    try:
+        cursor = conn.cursor()
+        cursor.execute("""
+            UPDATE users SET password = %s, password_reset_token = NULL, 
+            password_reset_expiry = NULL
+            WHERE email = %s
+        """, (new_password_hash, email))
+        conn.commit()
+        return cursor.rowcount > 0
+    finally:
+        conn.close()
+
+
+def update_last_login(user_id):
+    """Update last login timestamp for user"""
+    conn = get_db()
+    try:
+        from datetime import datetime
+        cursor = conn.cursor()
+        cursor.execute("""
+            UPDATE users SET last_login = %s WHERE id = %s
+        """, (datetime.now(), user_id))
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def prevent_modify_immutable(user_id):
+    """Placeholder - immutability removed"""
+    return True

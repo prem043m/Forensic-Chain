@@ -1,7 +1,11 @@
 import os
 import uuid
 import hashlib
+import secrets
+import smtplib
 from datetime import datetime, timedelta
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
 from functools import wraps
 
 from flask import (Flask, request, jsonify, session,
@@ -25,6 +29,15 @@ app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
 app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(hours=8)
 app.config["MAX_CONTENT_LENGTH"] = 100 * 1024 * 1024
 CORS(app, supports_credentials=True)
+
+# ── Email Configuration ────────────────────────────────────────────────────
+SMTP_SERVER = os.environ.get("SMTP_SERVER", "smtp.gmail.com")
+SMTP_PORT = int(os.environ.get("SMTP_PORT", 587))
+SMTP_USERNAME = os.environ.get("SMTP_USERNAME", "")
+SMTP_PASSWORD = os.environ.get("SMTP_PASSWORD", "")
+SENDER_EMAIL = os.environ.get("SENDER_EMAIL", "noreply@forensicchain.com")
+APP_URL = os.environ.get("APP_URL", "http://localhost:5000")
+EMAILS_ENABLED = bool(SMTP_USERNAME and SMTP_PASSWORD)
 
 UPLOAD_FOLDER = os.path.join(os.path.dirname(__file__), "..", "evidence_storage")
 ALLOWED_EXTENSIONS = {
@@ -50,6 +63,68 @@ except Exception:
 
 
 # ── Helpers ────────────────────────────────────────────────────────────────
+
+def send_email(recipient_email, subject, html_body):
+    """Send email notification"""
+    if not EMAILS_ENABLED:
+        app.logger.warning(f"Email disabled. Would send to {recipient_email}: {subject}")
+        return False
+    
+    try:
+        msg = MIMEMultipart("alternative")
+        msg["Subject"] = subject
+        msg["From"] = SENDER_EMAIL
+        msg["To"] = recipient_email
+        
+        part = MIMEText(html_body, "html")
+        msg.attach(part)
+        
+        with smtplib.SMTP(SMTP_SERVER, SMTP_PORT) as server:
+            server.starttls()
+            server.login(SMTP_USERNAME, SMTP_PASSWORD)
+            server.sendmail(SENDER_EMAIL, recipient_email, msg.as_string())
+        
+        return True
+    except Exception as e:
+        app.logger.error(f"Failed to send email: {str(e)}")
+        return False
+
+
+def send_login_notification(user_email, user_name):
+    """Send login notification email"""
+    subject = "ForensicChain - Login Notification"
+    html_body = f"""
+    <html>
+        <body>
+            <h2>Login Alert</h2>
+            <p>Hi {user_name},</p>
+            <p>Your account was logged in at <strong>{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</strong>.</p>
+            <p>If this wasn't you, please reset your password immediately.</p>
+            <p>Best regards,<br>ForensicChain Team</p>
+        </body>
+    </html>
+    """
+    return send_email(user_email, subject, html_body)
+
+
+def send_password_reset_email(user_email, reset_token):
+    """Send password reset email"""
+    reset_link = f"{APP_URL}/reset-password.html?token={reset_token}&email={user_email}"
+    subject = "ForensicChain - Password Reset Request"
+    html_body = f"""
+    <html>
+        <body>
+            <h2>Password Reset Request</h2>
+            <p>We received a request to reset your password.</p>
+            <p><a href="{reset_link}" style="background-color: #4CAF50; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px;">Reset Password</a></p>
+            <p>This link will expire in 1 hour.</p>
+            <p>If you didn't request this, you can ignore this email.</p>
+            <p>Best regards,<br>ForensicChain Team</p>
+        </body>
+    </html>
+    """
+    return send_email(user_email, subject, html_body)
+
 
 def allowed_file(filename):
     return "." in filename and filename.rsplit(".", 1)[1].lower() in ALLOWED_EXTENSIONS
@@ -148,7 +223,7 @@ def register():
     data = request.get_json()
     if not data:
         return jsonify({"error": "Invalid request body"}), 400
-    required = ["name", "email", "password", "role"]
+    required = ["name", "email", "password", "password_confirm", "role"]
     if not all(k in data for k in required):
         return jsonify({"error": "Missing required fields"}), 400
 
@@ -157,6 +232,9 @@ def register():
         return jsonify({"error": "Admin registration is disabled. Configure one private admin via environment variables."}), 403
     if data["role"] not in valid_roles:
         return jsonify({"error": "Invalid role"}), 400
+
+    if data["password"] != data["password_confirm"]:
+        return jsonify({"error": "Passwords do not match"}), 400
 
     if not is_strong_password(data["password"]):
         return jsonify({
@@ -186,6 +264,12 @@ def login():
     session.permanent = True
     session["user_id"] = user["id"]
     session["role"] = user["role"]
+    
+    # Update last login timestamp
+    db.update_last_login(user["id"])
+    
+    # Send login notification email
+    send_login_notification(user["email"], user["name"])
 
     return jsonify({
         "message": "Login successful",
@@ -203,6 +287,62 @@ def login():
 def logout():
     session.clear()
     return jsonify({"message": "Logged out"})
+
+
+@app.route("/api/auth/forgot-password", methods=["POST"])
+def forgot_password():
+    """Initiate password reset - send reset email"""
+    data = request.get_json()
+    if not data or "email" not in data:
+        return jsonify({"error": "Email required"}), 400
+    
+    email = data["email"]
+    user = db.get_user_by_email(email)
+    
+    # Always return success message (don't reveal if email exists)
+    if not user:
+        return jsonify({"message": "If this email exists, a reset link has been sent"}), 200
+    
+    # Generate reset token
+    reset_token = secrets.token_urlsafe(32)
+    
+    # Store token in database
+    if not db.set_password_reset_token(email, reset_token):
+        return jsonify({"error": "Failed to initiate password reset"}), 500
+    
+    # Send reset email
+    send_password_reset_email(email, reset_token)
+    
+    return jsonify({"message": "If this email exists, a reset link has been sent"}), 200
+
+
+@app.route("/api/auth/reset-password", methods=["POST"])
+def reset_password_confirm():
+    """Confirm password reset with token"""
+    data = request.get_json()
+    if not data or "email" not in data or "token" not in data or "password" not in data:
+        return jsonify({"error": "Email, token, and password required"}), 400
+    
+    email = data["email"]
+    token = data["token"]
+    password = data["password"]
+    
+    # Verify token
+    if not db.verify_reset_token(email, token):
+        return jsonify({"error": "Invalid or expired reset token"}), 401
+    
+    # Validate password strength
+    if not is_strong_password(password):
+        return jsonify({
+            "error": "Password must be at least 12 characters and include uppercase, lowercase, number, and symbol"
+        }), 400
+    
+    # Reset password
+    hashed = generate_password_hash(password)
+    if not db.reset_password(email, hashed):
+        return jsonify({"error": "Failed to reset password"}), 500
+    
+    return jsonify({"message": "Password reset successful"}), 200
 
 
 @app.route("/api/auth/me", methods=["GET"])

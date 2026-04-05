@@ -3,7 +3,18 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 from web3 import Web3
-from web3.middleware import geth_poa_middleware
+
+# Handle different versions of web3.py
+try:
+    # Older versions
+    from web3.middleware import geth_poa_middleware
+except ImportError:
+    try:
+        # Newer versions (7.x)
+        from web3.middleware import ExtraDataToPOAMiddleware
+        geth_poa_middleware = ExtraDataToPOAMiddleware()
+    except ImportError:
+        geth_poa_middleware = None
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 load_dotenv(PROJECT_ROOT / ".env")
@@ -125,7 +136,11 @@ class BlockchainManager:
                 return False
 
             self.w3 = Web3(Web3.HTTPProvider(RPC_URL))
-            self.w3.middleware_onion.inject(geth_poa_middleware, layer=0)
+            if geth_poa_middleware:
+                try:
+                    self.w3.middleware_onion.inject(geth_poa_middleware, layer=0)
+                except Exception as e:
+                    print(f"[Blockchain] Warning: Could not inject POA middleware: {e}. Continuing without it.")
 
             if not self.w3.is_connected():
                 print("[Blockchain] WARNING: Cannot connect to the configured RPC endpoint. Running in offline mode.")
