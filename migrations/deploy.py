@@ -22,10 +22,20 @@ import sys
 try:
     import solcx
     from web3 import Web3
+except ImportError as exc:
+    print(f"ERROR: Missing dependency: {exc}")
+    print("Run: python -m pip install py-solc-x web3")
+    sys.exit(1)
+
+# Handle middleware import across web3.py versions.
+try:
     from web3.middleware import geth_poa_middleware
 except ImportError:
-    print("ERROR: Missing dependencies. Run: pip install py-solc-x web3")
-    sys.exit(1)
+    try:
+        from web3.middleware import ExtraDataToPOAMiddleware
+        geth_poa_middleware = ExtraDataToPOAMiddleware()
+    except ImportError:
+        geth_poa_middleware = None
 
 GANACHE_URL = os.environ.get("GANACHE_URL", "http://127.0.0.1:7545")
 # Resolve paths from project root (one level above migrations/)
@@ -43,7 +53,11 @@ def main():
     # 1. Connect to Ganache
     print(f"\n[1/4] Connecting to Ganache at {GANACHE_URL}...")
     w3 = Web3(Web3.HTTPProvider(GANACHE_URL))
-    w3.middleware_onion.inject(geth_poa_middleware, layer=0)
+    if geth_poa_middleware is not None:
+        try:
+            w3.middleware_onion.inject(geth_poa_middleware, layer=0)
+        except Exception as exc:
+            print(f"  Warning: Could not inject POA middleware: {exc}. Continuing.")
 
     if not w3.is_connected():
         print("ERROR: Cannot connect to Ganache.")

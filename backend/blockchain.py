@@ -19,8 +19,16 @@ except ImportError:
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 load_dotenv(PROJECT_ROOT / ".env")
 
-RPC_URL = os.getenv("ALCHEMY_API_URL")
+# Explicit RPC_URL takes precedence. For local demo environments, prefer GANACHE_URL
+# over ALCHEMY_API_URL when both are present to avoid accidental network mismatch.
+RPC_URL = (
+    os.getenv("RPC_URL")
+    or os.getenv("GANACHE_URL")
+    or os.getenv("ALCHEMY_API_URL")
+    or "http://127.0.0.1:7545"
+)
 PRIVATE_KEY = os.getenv("PRIVATE_KEY")
+TX_RECEIPT_TIMEOUT_SEC = int(os.getenv("TX_RECEIPT_TIMEOUT_SEC", "120"))
 DEFAULT_CONTRACT_ADDRESS = os.getenv("CONTRACT_ADDRESS", "")
 CONTRACT_ADDRESS_FILE = os.path.join(os.path.dirname(__file__), "contract_address.txt")
 ABI_FILE = os.path.join(os.path.dirname(__file__), "..", "contracts", "Evidence_abi.json")
@@ -123,18 +131,12 @@ class BlockchainManager:
         self.contract = None
         self.account = None
         self.private_key = PRIVATE_KEY
+        self.signing_mode = None
         self.contract_address = None
         self._connected = False
 
     def connect(self):
         try:
-            if not RPC_URL:
-                print("[Blockchain] WARNING: ALCHEMY_API_URL is not configured. Running in offline mode.")
-                return False
-            if not self.private_key:
-                print("[Blockchain] WARNING: PRIVATE_KEY is not configured. Running in offline mode.")
-                return False
-
             self.w3 = Web3(Web3.HTTPProvider(RPC_URL))
             if geth_poa_middleware:
                 try:
@@ -146,11 +148,32 @@ class BlockchainManager:
                 print("[Blockchain] WARNING: Cannot connect to the configured RPC endpoint. Running in offline mode.")
                 return False
 
-            self.account = self.w3.eth.account.from_key(self.private_key).address
+            # Prefer private-key signing for hosted RPCs, but allow local unlocked
+            # accounts (Ganache/Hardhat/Anvil) when PRIVATE_KEY is not set.
+            if self.private_key:
+                self.account = self.w3.eth.account.from_key(self.private_key).address
+                self.signing_mode = "private_key"
+            else:
+                try:
+                    unlocked_accounts = self.w3.eth.accounts
+                except Exception:
+                    unlocked_accounts = []
+
+                if not unlocked_accounts:
+                    print(
+                        "[Blockchain] WARNING: PRIVATE_KEY is not configured and no unlocked RPC accounts were found. "
+                        "Running in offline mode."
+                    )
+                    return False
+
+                self.account = unlocked_accounts[0]
+                self.signing_mode = "node_unlocked"
+
             self._load_contract()
             self._connected = True
             print(f"[Blockchain] Connected to RPC endpoint at {RPC_URL}")
             print(f"[Blockchain] Using account: {self.account}")
+            print(f"[Blockchain] Signing mode: {self.signing_mode}")
             return True
         except Exception as e:
             print(f"[Blockchain] Connection error: {e}")
@@ -166,17 +189,42 @@ class BlockchainManager:
                     address = file_address
 
         if address:
+            checksum = Web3.to_checksum_address(address)
+            try:
+                code = self.w3.eth.get_code(checksum)
+                if not code or len(code) == 0:
+                    self.contract = None
+                    self.contract_address = address
+                    print(
+                        f"[Blockchain] WARNING: Address {address} has no bytecode on current network "
+                        f"(chain_id={self.w3.eth.chain_id}). Contract not loaded."
+                    )
+                    return
+            except Exception as e:
+                self.contract = None
+                self.contract_address = address
+                print(f"[Blockchain] WARNING: Could not verify contract bytecode at {address}: {e}")
+                return
+
             self.contract_address = address
             self.contract = self.w3.eth.contract(
-                address=Web3.to_checksum_address(address),
+                address=checksum,
                 abi=CONTRACT_ABI
             )
             print(f"[Blockchain] Contract loaded at {address}")
 
     def _sign_and_send(self, tx):
-        signed_tx = self.w3.eth.account.sign_transaction(tx, private_key=self.private_key)
-        tx_hash = self.w3.eth.send_raw_transaction(signed_tx.raw_transaction)
-        return self.w3.eth.wait_for_transaction_receipt(tx_hash)
+        if self.signing_mode == "private_key":
+            signed_tx = self.w3.eth.account.sign_transaction(tx, private_key=self.private_key)
+            tx_hash = self.w3.eth.send_raw_transaction(signed_tx.raw_transaction)
+        else:
+            tx_hash = self.w3.eth.send_transaction(tx)
+        try:
+            return self.w3.eth.wait_for_transaction_receipt(tx_hash, timeout=TX_RECEIPT_TIMEOUT_SEC)
+        except Exception as e:
+            raise RuntimeError(
+                f"Transaction {tx_hash.hex()} was not confirmed within {TX_RECEIPT_TIMEOUT_SEC} seconds: {e}"
+            )
 
     def _receipt_to_tx_meta(self, receipt):
         tx_hash = receipt.transactionHash.hex()
@@ -199,8 +247,6 @@ class BlockchainManager:
         """Deploy contract to the configured network. Returns contract address."""
         if not self.w3 or not self.w3.is_connected():
             return None, "Not connected to blockchain"
-        if not self.private_key:
-            return None, "Private key not configured"
 
         try:
             bytecode = self._get_bytecode()
@@ -396,6 +442,7 @@ class BlockchainManager:
             "network_id": self.w3.eth.chain_id,
             "block_number": self.w3.eth.block_number,
             "account": self.account,
+            "signing_mode": self.signing_mode,
             "contract_address": self.contract_address,
             "balance": str(self.w3.eth.get_balance(self.account)) if self.account else "0"
         }
