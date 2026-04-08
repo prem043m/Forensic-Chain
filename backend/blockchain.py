@@ -1,4 +1,5 @@
 import os
+from threading import Lock
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -134,6 +135,30 @@ class BlockchainManager:
         self.signing_mode = None
         self.contract_address = None
         self._connected = False
+        self._tx_lock = Lock()
+
+    def _next_nonce(self, account):
+        return self.w3.eth.get_transaction_count(account, "pending")
+
+    def _fee_fields(self):
+        """Build fee fields compatible with both legacy and EIP-1559 networks."""
+        latest = self.w3.eth.get_block("latest")
+        base_fee = latest.get("baseFeePerGas")
+
+        if base_fee is None:
+            return {"gasPrice": int(self.w3.eth.gas_price)}
+
+        try:
+            priority_fee = int(self.w3.eth.max_priority_fee)
+        except Exception:
+            # Safe default for testnets when RPC doesn't expose max_priority_fee.
+            priority_fee = self.w3.to_wei(2, "gwei")
+
+        max_fee = int(base_fee * 2 + priority_fee)
+        return {
+            "maxPriorityFeePerGas": priority_fee,
+            "maxFeePerGas": max_fee,
+        }
 
     def connect(self):
         try:
@@ -254,15 +279,16 @@ class BlockchainManager:
                 return None, "Bytecode not available. Compile Evidence.sol first."
 
             contract = self.w3.eth.contract(abi=CONTRACT_ABI, bytecode=bytecode)
-            nonce = self.w3.eth.get_transaction_count(self.account)
-            tx = contract.constructor().build_transaction({
-                "from": self.account,
-                "nonce": nonce,
-                "gas": 3000000,
-                "gasPrice": self.w3.eth.gas_price,
-                "chainId": self.w3.eth.chain_id,
-            })
-            receipt = self._sign_and_send(tx)
+            with self._tx_lock:
+                nonce = self._next_nonce(self.account)
+                tx = contract.constructor().build_transaction({
+                    "from": self.account,
+                    "nonce": nonce,
+                    "gas": 3000000,
+                    "chainId": self.w3.eth.chain_id,
+                    **self._fee_fields(),
+                })
+                receipt = self._sign_and_send(tx)
 
             self.contract_address = receipt.contractAddress
             self.contract = self.w3.eth.contract(
@@ -321,17 +347,18 @@ class BlockchainManager:
             return None, "Blockchain not connected or contract not deployed"
         try:
             acct = from_account or self.account
-            nonce = self.w3.eth.get_transaction_count(acct)
-            tx = self.contract.functions.addEvidence(
-                evidence_id, file_hash, file_name, case_id
-            ).build_transaction({
-                "from": acct,
-                "nonce": nonce,
-                "gas": 500000,
-                "gasPrice": self.w3.eth.gas_price,
-                "chainId": self.w3.eth.chain_id,
-            })
-            receipt = self._sign_and_send(tx)
+            with self._tx_lock:
+                nonce = self._next_nonce(acct)
+                tx = self.contract.functions.addEvidence(
+                    evidence_id, file_hash, file_name, case_id
+                ).build_transaction({
+                    "from": acct,
+                    "nonce": nonce,
+                    "gas": 500000,
+                    "chainId": self.w3.eth.chain_id,
+                    **self._fee_fields(),
+                })
+                receipt = self._sign_and_send(tx)
             return self._receipt_to_tx_meta(receipt), None
         except Exception as e:
             return None, str(e)
@@ -341,17 +368,18 @@ class BlockchainManager:
             return None, "Blockchain not connected or contract not deployed"
         try:
             acct = from_account or self.account
-            nonce = self.w3.eth.get_transaction_count(acct)
-            tx = self.contract.functions.transferEvidence(
-                evidence_id, action, note
-            ).build_transaction({
-                "from": acct,
-                "nonce": nonce,
-                "gas": 300000,
-                "gasPrice": self.w3.eth.gas_price,
-                "chainId": self.w3.eth.chain_id,
-            })
-            receipt = self._sign_and_send(tx)
+            with self._tx_lock:
+                nonce = self._next_nonce(acct)
+                tx = self.contract.functions.transferEvidence(
+                    evidence_id, action, note
+                ).build_transaction({
+                    "from": acct,
+                    "nonce": nonce,
+                    "gas": 300000,
+                    "chainId": self.w3.eth.chain_id,
+                    **self._fee_fields(),
+                })
+                receipt = self._sign_and_send(tx)
             return self._receipt_to_tx_meta(receipt), None
         except Exception as e:
             return None, str(e)
