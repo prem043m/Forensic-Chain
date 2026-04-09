@@ -1014,10 +1014,27 @@ async function loadBlockchainStatus() {
     statusText.textContent = connected ? 'Sepolia Active' : 'Sepolia Offline';
     statusDot.style.animation = connected ? 'sepoliaPulse 1.8s infinite' : 'none';
   } catch (error) {
+    console.warn('Failed to fetch /status', error);
     statusWrap.classList.add('is-down');
     statusText.textContent = 'Sepolia Offline';
     statusDot.style.animation = 'none';
   }
+}
+
+function setTextIfPresent(id, value) {
+  const el = document.getElementById(id);
+  if (el) el.textContent = value;
+}
+
+function setHeaderNetworkState(connected) {
+  const statusWrap = document.getElementById('header-network-status');
+  const statusDot = document.getElementById('header-network-dot');
+  const statusText = document.getElementById('header-network-text');
+  if (!statusWrap || !statusDot || !statusText) return;
+
+  statusWrap.classList.toggle('is-down', !connected);
+  statusText.textContent = connected ? 'Sepolia Active' : 'Sepolia Offline';
+  statusDot.style.animation = connected ? 'sepoliaPulse 1.8s infinite' : 'none';
 }
 
 function setScopeBadge(scope) {
@@ -1471,15 +1488,26 @@ async function loadBlockchainInfo() {
   const res = await fetch(`${API}/api/blockchain/info`, {credentials:'include'});
   if (!res.ok) return;
   const d = await res.json();
-  const connected = d.connected;
-  document.getElementById('bc-dot').style.background = connected ? 'var(--green)' : 'var(--red)';
-  document.getElementById('bc-label').textContent = connected ? `Block #${d.block_number}` : 'Disconnected';
-  document.getElementById('bc-network').textContent = connected ? `Chain ${d.network_id}` : '—';
-  document.getElementById('bc-block').textContent = connected ? d.block_number : '—';
-  document.getElementById('bc-account').textContent = connected ? (d.account||'—') : '—';
-  document.getElementById('bc-balance').textContent = connected ? `${(Number.parseInt(d.balance||0, 10)/1e18).toFixed(2)} ETH` : '—';
-  document.getElementById('bc-contract-display').textContent = d.contract_address || 'Contract not deployed';
-  if (d.contract_address) document.getElementById('bc-contract-input').value = d.contract_address;
+  const connected = Boolean(d.connected);
+  const blockText = connected ? d.block_number : '—';
+  const networkText = connected ? `Chain ${d.network_id}` : '—';
+  const accountText = connected ? (d.account || '—') : '—';
+  const balanceText = connected ? `${(Number.parseInt(d.balance || 0, 10) / 1e18).toFixed(2)} ETH` : '—';
+
+  const legacyDot = document.getElementById('bc-dot');
+  const legacyLabel = document.getElementById('bc-label');
+  if (legacyDot) legacyDot.style.background = connected ? 'var(--green)' : 'var(--red)';
+  if (legacyLabel) legacyLabel.textContent = connected ? `Block #${d.block_number}` : 'Disconnected';
+
+  setHeaderNetworkState(connected);
+  setTextIfPresent('bc-network', networkText);
+  setTextIfPresent('bc-block', blockText);
+  setTextIfPresent('bc-account', accountText);
+  setTextIfPresent('bc-balance', balanceText);
+  setTextIfPresent('bc-contract-display', d.contract_address || 'Contract not deployed');
+
+  const contractInputEl = document.getElementById('bc-contract-input');
+  if (d.contract_address && contractInputEl) contractInputEl.value = d.contract_address;
 }
 
 async function deployContract(evt) {
