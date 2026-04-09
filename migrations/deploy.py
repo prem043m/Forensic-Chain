@@ -37,12 +37,61 @@ except ImportError:
     except ImportError:
         geth_poa_middleware = None
 
-GANACHE_URL = os.environ.get("GANACHE_URL", "http://127.0.0.1:7545")
+RPC_URL = (
+    os.environ.get("RPC_URL")
+    or os.environ.get("SEPOLIA_RPC_URL")
+    or os.environ.get("GANACHE_URL")
+    or "http://127.0.0.1:7545"
+)
+PRIVATE_KEY = os.environ.get("PRIVATE_KEY")
+
 # Resolve paths from project root (one level above migrations/)
-ROOT_DIR    = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-SOL_FILE    = os.path.join(ROOT_DIR, "contracts", "Evidence.sol")
-ADDR_FILE   = os.path.join(ROOT_DIR, "backend", "contract_address.txt")
-ABI_FILE    = os.path.join(ROOT_DIR, "contracts", "Evidence_abi.json")
+ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+SOL_FILE = os.path.join(ROOT_DIR, "contracts", "Evidence.sol")
+ADDR_FILE = os.path.join(ROOT_DIR, "backend", "contract_address.txt")
+ABI_FILE = os.path.join(ROOT_DIR, "contracts", "Evidence_abi.json")
+ENV_FILE = os.path.join(ROOT_DIR, ".env")
+
+
+def build_fee_fields(w3):
+    latest = w3.eth.get_block("latest")
+    base_fee = latest.get("baseFeePerGas")
+    if base_fee is None:
+        return {"gasPrice": int(w3.eth.gas_price)}
+
+    try:
+        priority_fee = int(w3.eth.max_priority_fee)
+    except Exception:
+        priority_fee = w3.to_wei(2, "gwei")
+
+    return {
+        "maxPriorityFeePerGas": priority_fee,
+        "maxFeePerGas": int(base_fee * 2 + priority_fee),
+    }
+
+
+def persist_contract_address(address):
+    with open(ADDR_FILE, "w") as f:
+        f.write(address)
+
+    if os.path.exists(ENV_FILE):
+        with open(ENV_FILE, "r", encoding="utf-8") as f:
+            lines = f.read().splitlines()
+
+        updated = False
+        new_lines = []
+        for line in lines:
+            if line.startswith("CONTRACT_ADDRESS="):
+                new_lines.append(f"CONTRACT_ADDRESS={address}")
+                updated = True
+            else:
+                new_lines.append(line)
+
+        if not updated:
+            new_lines.append(f"CONTRACT_ADDRESS={address}")
+
+        with open(ENV_FILE, "w", encoding="utf-8") as f:
+            f.write("\n".join(new_lines).rstrip() + "\n")
 
 
 def main():
@@ -51,8 +100,8 @@ def main():
     print("=" * 55)
 
     # 1. Connect to Ganache
-    print(f"\n[1/4] Connecting to Ganache at {GANACHE_URL}...")
-    w3 = Web3(Web3.HTTPProvider(GANACHE_URL))
+    print(f"\n[1/4] Connecting to RPC at {RPC_URL}...")
+    w3 = Web3(Web3.HTTPProvider(RPC_URL))
     if geth_poa_middleware is not None:
         try:
             w3.middleware_onion.inject(geth_poa_middleware, layer=0)
@@ -60,16 +109,25 @@ def main():
             print(f"  Warning: Could not inject POA middleware: {exc}. Continuing.")
 
     if not w3.is_connected():
-        print("ERROR: Cannot connect to Ganache.")
-        print("  Make sure Ganache is running on port 7545.")
-        print("  Install Ganache: https://trufflesuite.com/ganache/")
+        print("ERROR: Cannot connect to the configured RPC endpoint.")
+        print("  Check RPC_URL / SEPOLIA_RPC_URL / GANACHE_URL.")
         sys.exit(1)
 
-    account = w3.eth.accounts[0]
+    if PRIVATE_KEY:
+        account = w3.eth.account.from_key(PRIVATE_KEY).address
+        signing_mode = "private_key"
+    else:
+        if not w3.eth.accounts:
+            print("ERROR: No unlocked accounts available and PRIVATE_KEY is not set.")
+            sys.exit(1)
+        account = w3.eth.accounts[0]
+        signing_mode = "node_unlocked"
+
     balance = w3.eth.get_balance(account)
     print(f"  Connected! Block #{w3.eth.block_number}")
     print(f"  Using account: {account}")
     print(f"  Balance: {w3.from_wei(balance, 'ether'):.2f} ETH")
+    print(f"  Signing mode: {signing_mode}")
 
     # 2. Compile contract
     print("\n[2/4] Compiling Evidence.sol...")
@@ -88,8 +146,22 @@ def main():
     # 3. Deploy
     print("\n[3/4] Deploying contract...")
     contract = w3.eth.contract(abi=abi, bytecode=bytecode)
-    tx_hash  = contract.constructor().transact({"from": account, "gas": 3_000_000})
-    receipt  = w3.eth.wait_for_transaction_receipt(tx_hash)
+    tx_params = {
+        "from": account,
+        "nonce": w3.eth.get_transaction_count(account, "pending"),
+        "gas": 3_000_000,
+        "chainId": w3.eth.chain_id,
+        **build_fee_fields(w3),
+    }
+    unsigned_tx = contract.constructor().build_transaction(tx_params)
+
+    if PRIVATE_KEY:
+        signed_tx = w3.eth.account.sign_transaction(unsigned_tx, private_key=PRIVATE_KEY)
+        tx_hash = w3.eth.send_raw_transaction(signed_tx.raw_transaction)
+    else:
+        tx_hash = w3.eth.send_transaction(unsigned_tx)
+
+    receipt = w3.eth.wait_for_transaction_receipt(tx_hash)
     address  = receipt.contractAddress
     gas_used = receipt.gasUsed
     print(f"  Deployed at: {address}")
@@ -98,9 +170,10 @@ def main():
 
     # 4. Save artifacts
     print("\n[4/4] Saving artifacts...")
-    with open(ADDR_FILE, "w") as f:
-        f.write(address)
+    persist_contract_address(address)
     print(f"  Contract address → {ADDR_FILE}")
+    if os.path.exists(ENV_FILE):
+        print(f"  CONTRACT_ADDRESS → {ENV_FILE}")
 
     with open(ABI_FILE, "w") as f:
         json.dump(abi, f, indent=2)
@@ -109,6 +182,7 @@ def main():
     print("\n" + "=" * 55)
     print("  Deployment complete!")
     print(f"  Contract Address: {address}")
+    print("  Update Render with CONTRACT_ADDRESS=" + address)
     print("  You can now start the backend: python backend/app.py")
     print("=" * 55)
 
