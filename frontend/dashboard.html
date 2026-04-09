@@ -63,6 +63,9 @@
     font-size: 13px; font-weight: 600; cursor: pointer;
     color: var(--text2); transition: all 0.12s; margin-bottom: 2px;
     border: 1px solid transparent;
+    width: 100%;
+    text-align: left;
+    background: transparent;
   }
 
   .nav-item:hover { background: var(--bg3); color: var(--text); }
@@ -336,39 +339,39 @@
 
   <nav class="sidebar-nav">
     <div class="nav-section-label">Main</div>
-    <div class="nav-item active" onclick="showPanel('dashboard')">
+    <button type="button" class="nav-item active" onclick="showPanel('dashboard')">
       <svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
       Dashboard
-    </div>
-    <div class="nav-item" onclick="showPanel('upload')">
+    </button>
+    <button type="button" class="nav-item" onclick="showPanel('upload')">
       <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
       Upload Evidence
-    </div>
-    <div class="nav-item" onclick="showPanel('evidence')">
+    </button>
+    <button type="button" class="nav-item" onclick="showPanel('evidence')">
       <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
       Evidence List
       <span class="nav-badge" id="ev-count">0</span>
-    </div>
+    </button>
 
     <div class="nav-section-label">Forensics</div>
-    <div class="nav-item" onclick="showPanel('verify')">
+    <button type="button" class="nav-item" onclick="showPanel('verify')">
       <svg viewBox="0 0 24 24"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
       Verify Evidence
-    </div>
-    <div class="nav-item" onclick="showPanel('custody')">
+    </button>
+    <button type="button" class="nav-item" onclick="showPanel('custody')">
       <svg viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
       Chain of Custody
-    </div>
+    </button>
 
     <div class="nav-section-label">System</div>
-    <div class="nav-item" onclick="showPanel('blockchain')">
+    <button type="button" class="nav-item" onclick="showPanel('blockchain')">
       <svg viewBox="0 0 24 24"><rect x="2" y="7" width="6" height="6"/><rect x="9" y="7" width="6" height="6"/><rect x="16" y="7" width="6" height="6"/><line x1="5" y1="13" x2="5" y2="17"/><line x1="12" y1="13" x2="12" y2="17"/><line x1="19" y1="13" x2="19" y2="17"/></svg>
       Blockchain
-    </div>
-    <div class="nav-item" id="admin-nav" onclick="showPanel('admin')" style="display:none">
+    </button>
+    <button type="button" class="nav-item" id="admin-nav" onclick="showPanel('admin')" style="display:none">
       <svg viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>
       Users
-    </div>
+    </button>
   </nav>
 
   <div class="sidebar-bottom">
@@ -474,29 +477,72 @@
           <div class="alert alert-ok"  id="upload-ok"></div>
           <div class="alert alert-err" id="upload-err"></div>
 
-          <div class="upload-zone" id="drop-zone" onclick="document.getElementById('file-input').click()">
+          <button type="button" class="upload-zone" id="drop-zone" onclick="document.getElementById('file-input').click()">
             <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
             <p>Drop evidence file here or click to browse</p>
             <span id="file-selected">Supported: .log, .pcap, .img, .pdf, .zip, .csv, .json and more · Max 25 MB</span>
-          </div>
+          </button>
           <input type="file" id="file-input" style="display:none" onchange="onFileSelected(this)">
 
           <div class="divider"></div>
 
           <div class="form-row">
             <div class="form-group">
-              <label>Case ID</label>
+              <label for="up-case">Case ID</label>
               <input type="text" id="up-case" placeholder="CASE-2024-001">
             </div>
             <div class="form-group">
-              <label>Evidence Description</label>
+              <label for="up-warrant">Warrant Number</label>
+              <input type="text" id="up-warrant" placeholder="WR-2026-019A">
+            </div>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label for="up-gps">Source GPS Coordinates</label>
+              <input type="text" id="up-gps" placeholder="28.6139,77.2090">
+            </div>
+            <div class="form-group">
+              <label for="up-device">Source Device ID</label>
+              <input type="text" id="up-device" placeholder="DEV-FORENSIC-LAB-12">
+            </div>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group"> 
+              <label for="up-witness">Witness Officer / Analyst</label>
+              <select id="up-witness">
+                <option value="">Select witness user</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="up-desc">Evidence Description</label>
               <input type="text" id="up-desc" placeholder="Brief description of evidence">
             </div>
           </div>
 
+          <div class="form-group" style="display:flex;align-items:center;gap:8px;margin-top:-4px">
+            <input type="checkbox" id="up-private" style="width:auto">
+            <label for="up-private" style="margin:0;cursor:pointer">Mark as private evidence (subpoena-based access)</label>
+          </div>
+
           <button class="btn btn-primary" onclick="doUpload()" id="upload-btn" style="width:100%">
-            Register on Blockchain &amp; Upload
+            Initiate Seizure Handshake
           </button>
+
+          <div class="divider"></div>
+          <div style="font-size:11px;color:var(--text3);font-family:'Space Mono', monospace;margin-bottom:8px">Witness attestation (Step 2 of 2)</div>
+          <div class="form-row">
+            <div class="form-group" style="margin:0">
+              <label for="attest-evidence-id">Pending Evidence ID</label>
+              <input type="text" id="attest-evidence-id" placeholder="EV-XXXXXXXX">
+            </div>
+            <div class="form-group" style="margin:0">
+              <label for="attest-note">Attestation Note</label>
+              <input type="text" id="attest-note" placeholder="Witness verified physical seizure and handoff.">
+            </div>
+          </div>
+          <button class="btn" onclick="attestSeizure()" style="width:100%;margin-top:10px">Witness Sign & Register On-Chain</button>
 
           <div id="upload-result" style="margin-top:16px;display:none">
             <div class="card" style="margin:0;background:var(--bg3)">
@@ -549,7 +595,7 @@
           <div style="padding:20px">
             <div class="alert alert-err" id="v1-err"></div>
             <div class="form-group">
-              <label>Evidence ID</label>
+              <label for="v1-id">Evidence ID</label>
               <input type="text" id="v1-id" placeholder="EV-XXXXXXXX">
             </div>
             <button class="btn btn-primary" style="width:100%" onclick="verifyById()">Verify Stored File</button>
@@ -565,11 +611,11 @@
           <div style="padding:20px">
             <div class="alert alert-err" id="v2-err"></div>
             <div class="form-group">
-              <label>Evidence ID</label>
+              <label for="v2-id">Evidence ID</label>
               <input type="text" id="v2-id" placeholder="EV-XXXXXXXX">
             </div>
             <div class="form-group">
-              <label>Upload File to Verify</label>
+              <label for="v2-file">Upload File to Verify</label>
               <input type="file" id="v2-file">
             </div>
             <button class="btn btn-primary" style="width:100%" onclick="verifyByFile()">Compare Against Blockchain</button>
@@ -591,11 +637,11 @@
         <div style="padding:16px">
           <div class="form-row" style="margin-bottom:12px">
             <div>
-              <label>Evidence ID</label>
+              <label for="coc-id">Evidence ID</label>
               <input type="text" id="coc-id" placeholder="EV-XXXXXXXX" oninput="loadCustody()">
             </div>
             <div>
-              <label>Add Custody Action</label>
+              <label for="coc-action">Add Custody Action</label>
               <div style="display:flex;gap:8px">
                 <select id="coc-action" style="flex:1">
                   <option>Collected</option><option>Analyzed</option>
@@ -608,7 +654,7 @@
             </div>
           </div>
           <div class="form-group">
-            <label>Note</label>
+            <label for="coc-note">Note</label>
             <input type="text" id="coc-note" placeholder="Describe the action taken">
           </div>
         </div>
@@ -660,7 +706,7 @@
         <div style="padding:18px">
           <div class="form-row" style="align-items:flex-end">
             <div class="form-group" style="margin:0">
-              <label>Contract Address</label>
+              <label for="bc-contract-input">Contract Address</label>
               <input type="text" id="bc-contract-input" placeholder="0x...">
             </div>
             <button class="btn btn-primary" onclick="setContractAddress()">Set Address</button>
@@ -737,6 +783,44 @@
           <div class="empty-state"><div class="spinner"></div></div>
         </div>
       </div>
+
+      <div class="card" style="margin-top:12px">
+        <div class="card-header">
+          <div class="card-title">Pending Admin Approvals</div>
+          <button class="btn btn-sm" onclick="loadPendingAdminActions()">Refresh</button>
+        </div>
+        <div id="admin-actions-wrap" style="padding:14px">
+          <div class="empty-state" style="padding:18px">No pending admin actions</div>
+        </div>
+      </div>
+
+      <div class="card" style="margin-top:12px">
+        <div class="card-header">
+          <div class="card-title">Forensic Timeline Analysis Tool</div>
+          <button class="btn btn-sm" onclick="loadAdminSuperViewUsers()">Refresh Users</button>
+        </div>
+        <div style="padding:14px;border-bottom:1px solid var(--border)">
+          <div class="form-row" style="grid-template-columns:1fr 2fr;gap:10px">
+            <div>
+              <label for="admin-super-user">Level 1: User Selection</label>
+              <select id="admin-super-user" onchange="loadAdminSuperViewFolders()">
+                <option value="">Select user</option>
+              </select>
+            </div>
+            <div style="font-size:12px;color:var(--text2);display:flex;align-items:flex-end;padding-bottom:6px">
+              Level 2: Chronological folders (Year > Month > Day) · Level 3: Combined super-timeline per file
+            </div>
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1.4fr;gap:12px;padding:14px">
+          <div id="admin-folder-wrap" style="max-height:360px;overflow:auto;border:1px solid var(--border);border-radius:10px;padding:10px;background:var(--bg3)">
+            <div class="empty-state" style="padding:18px">Select a user to view folders</div>
+          </div>
+          <div id="admin-super-timeline-wrap" style="max-height:360px;overflow:auto;border:1px solid var(--border);border-radius:10px;padding:10px;background:var(--bg3)">
+            <div class="empty-state" style="padding:18px">Select an evidence item to view super-timeline</div>
+          </div>
+        </div>
+      </div>
     </div>
 
   </div><!-- /content -->
@@ -770,6 +854,7 @@ let currentUser = null;
 let allEvidence = [];
 let adminHealthSnapshot = null;
 let adminSuspiciousEvents = [];
+let adminSuperUsers = [];
 const MAX_UPLOAD_SIZE_MB = 25;
 const ALLOWED_UPLOAD_EXTENSIONS = new Set([
   'txt', 'pdf', 'png', 'jpg', 'jpeg', 'pcap', 'log',
@@ -777,25 +862,44 @@ const ALLOWED_UPLOAD_EXTENSIONS = new Set([
 ]);
 
 // ── Init ────────────────────────────────────────────────────
-async function init() {
-  const res = await fetch(`${API}/api/auth/me`, {credentials:'include'});
-  if (!res.ok) { window.location.href = '/index.html'; return; }
-  currentUser = await res.json();
+function init() {
+  fetch(`${API}/api/auth/me`, {credentials:'include'})
+    .then(res => {
+      if (!res.ok) {
+        globalThis.location.href = '/index.html';
+        return null;
+      }
+      return res.json();
+    })
+    .then(user => {
+      if (!user) {
+        return;
+      }
+      currentUser = user;
 
-  document.getElementById('user-name').textContent = currentUser.name;
-  document.getElementById('user-role').textContent = currentUser.role.replace('_',' ');
-  document.getElementById('user-avatar').textContent = currentUser.name.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
+      document.getElementById('user-name').textContent = currentUser.name;
+      document.getElementById('user-role').textContent = currentUser.role.replace('_',' ');
+      document.getElementById('user-avatar').textContent = currentUser.name.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
 
-  if (currentUser.role === 'admin') document.getElementById('admin-nav').style.display = '';
+      if (currentUser.role === 'admin') document.getElementById('admin-nav').style.display = '';
 
-  renderRoleDashboard();
+      if (currentUser.role === 'investigator' || currentUser.role === 'police') {
+        loadWitnessCandidates();
+      }
 
-  loadStats();
-  loadRecentEvidence();
-  loadRecentLogs();
-  loadBlockchainInfo();
-  setInterval(loadBlockchainInfo, 15000);
-  setInterval(loadStats, 30000);
+      renderRoleDashboard();
+
+      loadStats();
+      loadRecentEvidence();
+      loadRecentLogs();
+      loadBlockchainInfo();
+      setInterval(loadBlockchainInfo, 15000);
+      setInterval(loadStats, 30000);
+    })
+    .catch(err => {
+      console.error('Failed to initialize dashboard', err);
+      globalThis.location.href = '/index.html';
+    });
 }
 
 // ── Navigation ──────────────────────────────────────────────
@@ -827,6 +931,8 @@ function showPanel(name) {
   if (name === 'evidence') loadEvidence();
   if (name === 'admin') {
     loadUsers();
+    loadPendingAdminActions();
+    loadAdminSuperViewUsers();
     loadSystemHealth();
     loadSuspiciousActivity();
   }
@@ -835,7 +941,7 @@ function showPanel(name) {
 // ── Logout ──────────────────────────────────────────────────
 async function doLogout() {
   await fetch(`${API}/api/auth/logout`, {method:'POST', credentials:'include'});
-  window.location.href = '/index.html';
+  globalThis.location.href = '/index.html';
 }
 
 // ── Stats ────────────────────────────────────────────────────
@@ -941,18 +1047,26 @@ async function loadRecentLogs() {
   const wrap = document.getElementById('recent-logs');
   if (!logs.length) { wrap.innerHTML = '<div class="empty-state">No activity yet</div>'; return; }
   const recent = logs.slice(0,8);
-  wrap.innerHTML = `<div class="timeline">${recent.map(l => `
-    <div class="tl-item">
-      <div class="tl-left">
-        <div class="tl-dot" style="background:${actionColor(l.action)}"></div>
-        <div class="tl-line"></div>
-      </div>
-      <div class="tl-content">
-        <div class="tl-action">${escapeHtml(l.action)} <span style="font-size:11px;font-weight:400;color:var(--blue)">${escapeHtml(l.evidence_id)}</span></div>
-        <div class="tl-actor">${escapeHtml(l.actor_name||'System')} ${payload.scope === 'personal' ? '<span class="badge badge-info" style="margin-left:6px">You</span>' : ''}</div>
-        <div class="tl-time">${fmtDate(l.created_at)}</div>
-      </div>
-    </div>`).join('')}</div>`;
+  const rows = recent.map(log => {
+    const actorName = escapeHtml(log.actor_name || 'System');
+    const evidenceId = escapeHtml(log.evidence_id || '');
+    const youBadge = payload.scope === 'personal'
+      ? '<span class="badge badge-info" style="margin-left:6px">You</span>'
+      : '';
+    return `
+      <div class="tl-item">
+        <div class="tl-left">
+          <div class="tl-dot" style="background:${actionColor(log.action)}"></div>
+          <div class="tl-line"></div>
+        </div>
+        <div class="tl-content">
+          <div class="tl-action">${escapeHtml(log.action)} <span style="font-size:11px;font-weight:400;color:var(--blue)">${evidenceId}</span></div>
+          <div class="tl-actor">${actorName} ${youBadge}</div>
+          <div class="tl-time">${fmtDate(log.created_at)}</div>
+        </div>
+      </div>`;
+  }).join('');
+  wrap.innerHTML = '<div class="timeline">' + rows + '</div>';
 }
 
 function renderRoleDashboard() {
@@ -974,7 +1088,7 @@ function renderRoleDashboard() {
     return;
   }
 
-  if (role === 'investigator') {
+  if (role === 'investigator' || role === 'police') {
     el.innerHTML = `
       <div style="font-size:13px;margin-bottom:10px">Signed in as <span class="badge badge-info">${escapeHtml(roleLabel)}</span>. Your dashboard focuses on collection, transfers, and verification progress.</div>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
@@ -1063,13 +1177,29 @@ dz.addEventListener('drop', e => {
 async function doUpload() {
   if (!selectedFile) { showAlert('upload-err', 'Please select a file'); return; }
   if (!validateUploadFile(selectedFile)) { return; }
+  const caseId = document.getElementById('up-case').value.trim();
+  const warrant = document.getElementById('up-warrant').value.trim();
+  const gps = document.getElementById('up-gps').value.trim();
+  const device = document.getElementById('up-device').value.trim();
+  const witnessUserId = document.getElementById('up-witness').value;
+
+  if (!caseId || !warrant || !gps || !device || !witnessUserId) {
+    showAlert('upload-err', 'Case ID, warrant, GPS, device ID, and witness are mandatory.');
+    return;
+  }
+
   const btn = document.getElementById('upload-btn');
-  btn.innerHTML = '<span class="spinner"></span> Registering on blockchain...';
+  btn.innerHTML = '<span class="spinner"></span> Initiating seizure...';
   btn.disabled = true;
 
   const fd = new FormData();
   fd.append('file', selectedFile);
-  fd.append('case_id', document.getElementById('up-case').value || 'CASE-UNKNOWN');
+  fd.append('case_id', caseId);
+  fd.append('warrant_number', warrant);
+  fd.append('source_gps', gps);
+  fd.append('source_device_id', device);
+  fd.append('witness_user_id', witnessUserId);
+  fd.append('is_private', document.getElementById('up-private').checked ? 'true' : 'false');
   fd.append('description', document.getElementById('up-desc').value);
 
   try {
@@ -1082,11 +1212,10 @@ async function doUpload() {
       document.getElementById('res-tx').textContent = data.tx_hash;
       document.getElementById('res-block').textContent = txMeta.block_number ?? '—';
       document.getElementById('res-ts').textContent = txMeta.timestamp ? new Date(txMeta.timestamp * 1000).toLocaleString() : '—';
-      document.getElementById('res-bc').innerHTML = data.blockchain_registered
-        ? '<span class="badge badge-ok">Registered</span>'
-        : `<span class="badge badge-warn">Fallback Mode</span>${data.blockchain_error ? ` <span class="mono" style="font-size:10px;color:var(--text3)">(${escapeHtml(data.blockchain_error)})</span>` : ''}`;
+      document.getElementById('res-bc').innerHTML = '<span class="badge badge-warn">Pending Witness Signature</span>';
       document.getElementById('upload-result').style.display = 'block';
-      showAlert('upload-ok', `Evidence ${data.evidence_id} registered successfully`);
+      showAlert('upload-ok', `Seizure initiated for ${data.evidence_id}. Witness ${data.witness_required_name || ''} must attest.`);
+      document.getElementById('attest-evidence-id').value = data.evidence_id;
       resetSelectedFile();
       loadStats();
       loadRecentEvidence();
@@ -1094,13 +1223,51 @@ async function doUpload() {
       if (res.status === 409 && data.duplicate_evidence) {
         const dup = data.duplicate_evidence;
         showAlert('upload-err', `Duplicate evidence detected. Existing ID: ${dup.evidence_id} (${dup.file_name})`);
-      } else {
-        showAlert('upload-err', data.error || 'Upload failed');
+        return;
       }
+      showAlert('upload-err', data.error || 'Upload failed');
     }
-  } catch(e) { showAlert('upload-err', 'Network error'); }
-  btn.innerHTML = 'Register on Blockchain & Upload';
+  } catch (e) {
+    console.error('Upload failed', e);
+    showAlert('upload-err', 'Network error');
+  }
+  btn.innerHTML = 'Initiate Seizure Handshake';
   btn.disabled = false;
+}
+
+async function loadWitnessCandidates() {
+  const sel = document.getElementById('up-witness');
+  if (!sel) return;
+  const res = await fetch(`${API}/api/users/witness-candidates`, {credentials:'include'});
+  if (!res.ok) return;
+  const users = await res.json();
+  sel.innerHTML = '<option value="">Select witness user</option>' + users
+    .map(u => `<option value="${u.id}">${escapeHtml(u.name)} (${escapeHtml(String(u.role || '').replace('_',' '))})</option>`)
+    .join('');
+}
+
+async function attestSeizure() {
+  const evidenceId = document.getElementById('attest-evidence-id').value.trim();
+  const note = document.getElementById('attest-note').value.trim();
+  if (!evidenceId) {
+    alert('Enter a pending evidence ID for attestation.');
+    return;
+  }
+  const res = await fetch(`${API}/api/seizure/attest`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({evidence_id: evidenceId, note})
+  });
+  const data = await res.json();
+  if (!res.ok) {
+    alert(data.error || 'Witness attestation failed');
+    return;
+  }
+  alert(`Witness attestation complete. On-chain TX: ${data.tx_hash}`);
+  document.getElementById('attest-note').value = '';
+  loadEvidence();
+  loadRecentLogs();
 }
 
 // ── Verify ───────────────────────────────────────────────────
@@ -1170,38 +1337,47 @@ async function loadCustody() {
     document.getElementById('custody-timeline').innerHTML = '<div class="empty-state">No custody records found</div>';
     return;
   }
-  document.getElementById('custody-timeline').innerHTML = `<div class="timeline">${logs.map((l,i) => `
-    <div class="tl-item">
-      <div class="tl-left">
-        <div class="tl-dot" style="background:${actionColor(l.action)}"></div>
-        ${i < logs.length-1 ? '<div class="tl-line"></div>' : ''}
-      </div>
-      <div class="tl-content">
-        <div class="custody-headline">
-          ${actionBadge(l.action)}
-          <span class="tl-action">${escapeHtml(l.action || 'Action')}</span>
+  const custodyRows = logs.map((log, index) => {
+    const line = index < logs.length - 1 ? '<div class="tl-line"></div>' : '';
+    const actorRole = log.actor_role ? `(${escapeHtml(log.actor_role)})` : '';
+    const txRef = log.tx_hash ? `${escapeHtml(log.tx_hash.substring(0,20))}...` : '—';
+    const note = log.note
+      ? `<div class="tl-note" style="margin-top:8px">Note: ${escapeHtml(log.note)}</div>`
+      : '';
+    return `
+      <div class="tl-item">
+        <div class="tl-left">
+          <div class="tl-dot" style="background:${actionColor(log.action)}"></div>
+          ${line}
         </div>
-        <div class="custody-meta">
-          <div>
-            <div class="custody-meta-label">Accessed By</div>
-            <div class="custody-meta-val">${escapeHtml(l.actor_name||'Unknown')} ${l.actor_role ? `(${escapeHtml(l.actor_role)})` : ''}</div>
+        <div class="tl-content">
+          <div class="custody-headline">
+            ${actionBadge(log.action)}
+            <span class="tl-action">${escapeHtml(log.action || 'Action')}</span>
           </div>
-          <div>
-            <div class="custody-meta-label">Accessed At</div>
-            <div class="custody-meta-val mono">${fmtDate(l.created_at)}</div>
+          <div class="custody-meta">
+            <div>
+              <div class="custody-meta-label">Accessed By</div>
+              <div class="custody-meta-val">${escapeHtml(log.actor_name||'Unknown')} ${actorRole}</div>
+            </div>
+            <div>
+              <div class="custody-meta-label">Accessed At</div>
+              <div class="custody-meta-val mono">${fmtDate(log.created_at)}</div>
+            </div>
+            <div>
+              <div class="custody-meta-label">Action Type</div>
+              <div class="custody-meta-val">${escapeHtml(log.action||'—')}</div>
+            </div>
+            <div>
+              <div class="custody-meta-label">Transaction Ref</div>
+              <div class="custody-meta-val mono">${txRef}</div>
+            </div>
           </div>
-          <div>
-            <div class="custody-meta-label">Action Type</div>
-            <div class="custody-meta-val">${escapeHtml(l.action||'—')}</div>
-          </div>
-          <div>
-            <div class="custody-meta-label">Transaction Ref</div>
-            <div class="custody-meta-val mono">${l.tx_hash ? escapeHtml(l.tx_hash.substring(0,20)) + '...' : '—'}</div>
-          </div>
+          ${note}
         </div>
-        ${l.note ? `<div class="tl-note" style="margin-top:8px">Note: ${escapeHtml(l.note)}</div>` : ''}
-      </div>
-    </div>`).join('')}</div>`;
+      </div>`;
+  }).join('');
+  document.getElementById('custody-timeline').innerHTML = '<div class="timeline">' + custodyRows + '</div>';
 }
 
 async function addCustodyAction() {
@@ -1217,9 +1393,14 @@ async function addCustodyAction() {
   const data = await res.json();
   if (res.ok) {
     const txMeta = data.tx_metadata || {};
-    const info = data.blockchain_recorded
-      ? `TX: ${data.tx_hash} | Block: ${txMeta.block_number ?? '—'} | Time: ${txMeta.timestamp ? new Date(txMeta.timestamp * 1000).toLocaleString() : '—'}`
-      : `Fallback mode used. TX ref: ${data.tx_hash}${data.blockchain_error ? ` | Reason: ${data.blockchain_error}` : ''}`;
+    const tsLabel = txMeta.timestamp
+      ? new Date(txMeta.timestamp * 1000).toLocaleString()
+      : '—';
+    let info = `TX: ${data.tx_hash} | Block: ${txMeta.block_number ?? '—'} | Time: ${tsLabel}`;
+    if (!data.blockchain_recorded) {
+      const reason = data.blockchain_error ? ` | Reason: ${data.blockchain_error}` : '';
+      info = `Fallback mode used. TX ref: ${data.tx_hash}${reason}`;
+    }
     alert(`Custody action recorded.\n${info}`);
     document.getElementById('coc-note').value = '';
     loadCustody();
@@ -1239,7 +1420,7 @@ async function loadBlockchainInfo() {
   document.getElementById('bc-network').textContent = connected ? `Chain ${d.network_id}` : '—';
   document.getElementById('bc-block').textContent = connected ? d.block_number : '—';
   document.getElementById('bc-account').textContent = connected ? (d.account||'—') : '—';
-  document.getElementById('bc-balance').textContent = connected ? `${(parseInt(d.balance||0)/1e18).toFixed(2)} ETH` : '—';
+  document.getElementById('bc-balance').textContent = connected ? `${(Number.parseInt(d.balance||0, 10)/1e18).toFixed(2)} ETH` : '—';
   document.getElementById('bc-contract-display').textContent = d.contract_address || 'Contract not deployed';
   if (d.contract_address) document.getElementById('bc-contract-input').value = d.contract_address;
 }
@@ -1315,7 +1496,7 @@ async function viewEvidence(id) {
           <div class="tl-actor">${escapeHtml(l.actor_name||'System')}</div>
           ${l.note ? `<div class="tl-note">${escapeHtml(l.note)}</div>` : ''}
           <div class="tl-time">${fmtDate(l.created_at)}</div>
-          ${l.tx_metadata ? `<div class="tl-note">Block: ${l.tx_metadata.block_number ?? '—'} · Chain Time: ${l.tx_metadata.timestamp ? new Date(l.tx_metadata.timestamp * 1000).toLocaleString() : '—'}</div>` : ''}
+          ${l.tx_metadata ? `<div class="tl-note">${buildTxMetaSummary(l.tx_metadata)}</div>` : ''}
         </div>
       </div>`).join('')}</div>
     <div class="divider"></div>
@@ -1363,7 +1544,8 @@ async function openTxModal(evidenceId) {
         ${errorLine}
       </div>
     `;
-  } catch (_err) {
+  } catch (err) {
+    console.error('Failed to load transaction metadata', err);
     document.getElementById('tx-modal-body').innerHTML = '<div style="font-size:12px;color:var(--red)">Network error while loading transaction metadata.</div>';
   }
 }
@@ -1398,33 +1580,57 @@ async function loadUsers() {
   const res = await fetch(`${API}/api/admin/users`, {credentials:'include'});
   if (!res.ok) { document.getElementById('users-table-wrap').innerHTML = '<div class="empty-state">Access denied</div>'; return; }
   const users = await res.json();
+  const rows = users.map(buildUserRow).join('');
   document.getElementById('users-table-wrap').innerHTML = `<table><thead><tr>
     <th>Name</th><th>Email</th><th>Role</th><th>Status</th><th>Last Login</th><th>Registered</th><th></th>
-  </tr></thead><tbody>${users.map(u => `<tr>
-    <td>${escapeHtml(u.name)}</td>
-    <td class="mono" style="font-size:11px">${escapeHtml(u.email)}</td>
-    <td>${roleBadge(u.role)}</td>
-    <td>${u.is_active ? '<span class="badge badge-ok">Active</span>' : '<span class="badge badge-err">Disabled</span>'}</td>
-    <td class="mono" style="font-size:10px;color:var(--text3)">${fmtDate(u.last_login)}</td>
-    <td class="mono" style="font-size:10px;color:var(--text3)">${fmtDate(u.created_at)}</td>
-    <td style="display:flex;gap:6px;justify-content:flex-end">
-      ${u.role !== 'admin' ? (u.is_active
-        ? `<button class="btn btn-sm btn-danger" onclick="disableUser(${u.id}, '${escapeAttr(u.name)}')">Disable</button>`
-        : `<button class="btn btn-sm btn-primary" onclick="enableUser(${u.id}, '${escapeAttr(u.name)}')">Enable</button>`) : ''}
-      ${u.role !== 'admin' ? `<button class="btn btn-sm" onclick="deleteUser(${u.id}, '${escapeAttr(u.name)}')">Delete</button>` : ''}
-    </td>
-  </tr>`).join('')}</tbody></table>`;
+  </tr></thead><tbody>${rows}</tbody></table>`;
+}
+
+function buildUserRow(user) {
+  const status = user.is_active
+    ? '<span class="badge badge-ok">Active</span>'
+    : '<span class="badge badge-err">Disabled</span>';
+  const actions = buildUserActionButtons(user);
+  return `<tr>
+    <td>${escapeHtml(user.name)}</td>
+    <td class="mono" style="font-size:11px">${escapeHtml(user.email)}</td>
+    <td>${roleBadge(user.role)}</td>
+    <td>${status}</td>
+    <td class="mono" style="font-size:10px;color:var(--text3)">${fmtDate(user.last_login)}</td>
+    <td class="mono" style="font-size:10px;color:var(--text3)">${fmtDate(user.created_at)}</td>
+    <td style="display:flex;gap:6px;justify-content:flex-end">${actions}</td>
+  </tr>`;
+}
+
+function buildUserActionButtons(user) {
+  if (user.role === 'admin') {
+    return '';
+  }
+  const userName = escapeAttr(user.name);
+  const toggle = user.is_active
+    ? `<button class="btn btn-sm btn-danger" onclick="disableUser(${user.id}, '${userName}')">Disable</button>`
+    : `<button class="btn btn-sm btn-primary" onclick="enableUser(${user.id}, '${userName}')">Enable</button>`;
+  const del = `<button class="btn btn-sm" onclick="deleteUser(${user.id}, '${userName}')">Delete</button>`;
+  return toggle + del;
 }
 
 async function disableUser(userId, userName) {
-  if (!confirm(`Disable user ${userName}?`)) return;
-  const res = await fetch(`${API}/api/admin/users/${userId}/disable`, {method:'POST', credentials:'include'});
+  const reason = prompt(`Enter legal reason for deactivating ${userName}:`);
+  if (!reason) return;
+  const res = await fetch(`${API}/api/admin/users/${userId}/disable`, {
+    method:'POST',
+    credentials:'include',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({reason})
+  });
   const data = await res.json();
   if (!res.ok) {
     alert(data.error || 'Failed to disable user');
     return;
   }
+  alert(`Deactivation request created (Action ID: ${data.action_id}). Waiting for second admin approval.`);
   loadUsers();
+  loadPendingAdminActions();
   loadSystemHealth();
 }
 
@@ -1437,6 +1643,7 @@ async function enableUser(userId, userName) {
     return;
   }
   loadUsers();
+  loadPendingAdminActions();
   loadSystemHealth();
 }
 
@@ -1449,6 +1656,181 @@ async function deleteUser(userId, userName) {
     return;
   }
   loadUsers();
+  loadPendingAdminActions();
+  loadSystemHealth();
+}
+
+async function loadPendingAdminActions() {
+  const wrap = document.getElementById('admin-actions-wrap');
+  if (!wrap) return;
+  const res = await fetch(`${API}/api/admin/actions/pending`, {credentials:'include'});
+  if (!res.ok) {
+    wrap.innerHTML = '<div class="empty-state" style="padding:18px">Unable to load pending actions</div>';
+    return;
+  }
+  const items = await res.json();
+  if (!items.length) {
+    wrap.innerHTML = '<div class="empty-state" style="padding:18px">No pending admin actions</div>';
+    return;
+  }
+  wrap.innerHTML = items.map(item => `
+    <div style="padding:10px 0;border-bottom:1px solid var(--border)">
+      <div style="display:flex;justify-content:space-between;gap:8px;align-items:center">
+        <span class="badge badge-warn">${escapeHtml(String(item.action_type || '').replaceAll('_',' '))}</span>
+        <span class="mono" style="font-size:10px;color:var(--text3)">${fmtDate(item.created_at)}</span>
+      </div>
+      <div style="margin-top:6px;font-size:12px;color:var(--text)">Target: ${escapeHtml(item.target_name || 'Unknown')} (${escapeHtml(item.target_role || 'unknown')})</div>
+      <div style="font-size:11px;color:var(--text2)">Requested by: ${escapeHtml(item.requested_by_name || 'Unknown')}</div>
+      <div style="font-size:11px;color:var(--text3)">Reason: ${escapeHtml(item.reason || '—')}</div>
+      <div style="margin-top:8px">
+        <button class="btn btn-sm btn-primary" onclick="approveAdminAction(${item.id})">Approve & Execute</button>
+      </div>
+    </div>
+  `).join('');
+}
+
+async function loadAdminSuperViewUsers() {
+  const sel = document.getElementById('admin-super-user');
+  const folderWrap = document.getElementById('admin-folder-wrap');
+  const timelineWrap = document.getElementById('admin-super-timeline-wrap');
+  if (!sel || !folderWrap || !timelineWrap) return;
+
+  const res = await fetch(`${API}/api/admin/super-view/users`, {credentials:'include'});
+  if (!res.ok) {
+    folderWrap.innerHTML = '<div class="empty-state" style="padding:18px">Unable to load users</div>';
+    return;
+  }
+
+  adminSuperUsers = await res.json();
+  sel.innerHTML = '<option value="">Select user</option>' + adminSuperUsers
+    .map(u => `<option value="${u.id}">${escapeHtml(u.name)} (${escapeHtml(String(u.role||'').replace('_',' '))})</option>`)
+    .join('');
+
+  folderWrap.innerHTML = '<div class="empty-state" style="padding:18px">Select a user to view folders</div>';
+  timelineWrap.innerHTML = '<div class="empty-state" style="padding:18px">Select an evidence item to view super-timeline</div>';
+}
+
+async function loadAdminSuperViewFolders() {
+  const sel = document.getElementById('admin-super-user');
+  const folderWrap = document.getElementById('admin-folder-wrap');
+  const timelineWrap = document.getElementById('admin-super-timeline-wrap');
+  if (!sel || !folderWrap || !timelineWrap) return;
+
+  const userId = sel.value;
+  if (!userId) {
+    folderWrap.innerHTML = '<div class="empty-state" style="padding:18px">Select a user to view folders</div>';
+    return;
+  }
+
+  const res = await fetch(`${API}/api/admin/super-view/${userId}/folders`, {credentials:'include'});
+  if (!res.ok) {
+    folderWrap.innerHTML = '<div class="empty-state" style="padding:18px">Unable to load folders</div>';
+    return;
+  }
+
+  const payload = await res.json();
+  const folders = payload.folders || {};
+  const years = Object.keys(folders).sort((a,b) => b.localeCompare(a));
+  if (!years.length) {
+    folderWrap.innerHTML = '<div class="empty-state" style="padding:18px">No evidence for this user</div>';
+    timelineWrap.innerHTML = '<div class="empty-state" style="padding:18px">No evidence selected</div>';
+    return;
+  }
+
+  folderWrap.innerHTML = years.map(year => renderYearFolder(year, folders[year] || {})).join('');
+}
+
+function renderYearFolder(year, monthsMap) {
+  const months = Object.keys(monthsMap).sort((a,b) => b.localeCompare(a));
+  const monthHtml = months.map(month => renderMonthFolder(month, monthsMap[month] || {})).join('');
+  return `<details open style="margin-bottom:8px"><summary class="mono" style="cursor:pointer;font-size:12px;color:var(--text)">Year ${year}</summary>
+    <div style="padding-left:10px;margin-top:6px">${monthHtml}</div>
+  </details>`;
+}
+
+function renderMonthFolder(month, daysMap) {
+  const days = Object.keys(daysMap).sort((a,b) => b.localeCompare(a));
+  const dayHtml = days.map(day => renderDayFolder(day, daysMap[day] || [])).join('');
+  return `<details style="margin-bottom:6px"><summary class="mono" style="cursor:pointer;font-size:11px;color:var(--text2)">Month ${month}</summary>
+    <div style="padding-left:10px;margin-top:6px">${dayHtml}</div>
+  </details>`;
+}
+
+function renderDayFolder(day, evidences) {
+  const evidenceHtml = evidences.map(renderFolderEvidenceButton).join('');
+  return `<details style="margin-bottom:4px"><summary class="mono" style="cursor:pointer;font-size:10px;color:var(--text3)">Day ${day} (${evidences.length})</summary>
+    <div style="padding-left:8px;margin-top:5px;display:grid;gap:5px">${evidenceHtml}</div>
+  </details>`;
+}
+
+function renderFolderEvidenceButton(evidence) {
+  return `<button class="btn btn-sm" style="text-align:left" onclick="loadAdminSuperEvidenceTimeline('${escapeAttr(evidence.evidence_id)}')">
+    <span class="mono" style="font-size:10px;color:var(--blue)">${escapeHtml(evidence.evidence_id)}</span>
+    <span style="font-size:11px;margin-left:6px">${escapeHtml(evidence.file_name)}</span>
+  </button>`;
+}
+
+async function loadAdminSuperEvidenceTimeline(evidenceId) {
+  const wrap = document.getElementById('admin-super-timeline-wrap');
+  if (!wrap) return;
+  wrap.innerHTML = '<div class="empty-state" style="padding:18px">Loading super-timeline...</div>';
+
+  const res = await fetch(`${API}/api/admin/super-view/evidence/${encodeURIComponent(evidenceId)}/timeline`, {credentials:'include'});
+  if (!res.ok) {
+    wrap.innerHTML = '<div class="empty-state" style="padding:18px">Unable to load super-timeline</div>';
+    return;
+  }
+
+  const payload = await res.json();
+  const ev = payload.evidence || {};
+  const timeline = payload.timeline || [];
+  if (!timeline.length) {
+    wrap.innerHTML = '<div class="empty-state" style="padding:18px">No timeline events</div>';
+    return;
+  }
+
+  const typeBadge = (t) => {
+    if (t === 'system') return '<span class="badge badge-info">System Logs</span>';
+    if (t === 'evidence') return '<span class="badge badge-warn">Evidence Actions</span>';
+    return '<span class="badge badge-ok">Blockchain Status</span>';
+  };
+
+  wrap.innerHTML = `
+    <div style="padding-bottom:8px;margin-bottom:8px;border-bottom:1px solid var(--border)">
+      <div class="mono" style="font-size:11px;color:var(--blue)">${escapeHtml(ev.evidence_id || '')}</div>
+      <div style="font-size:12px;color:var(--text)">${escapeHtml(ev.file_name || '')}</div>
+    </div>
+    <div class="timeline">${timeline.map(item => `
+      <div class="tl-item">
+        <div class="tl-left">
+          <div class="tl-dot" style="background:${superTimelineDotColor(item.type)}" ></div>
+          <div class="tl-line"></div>
+        </div>
+        <div class="tl-content">
+          <div style="margin-bottom:4px">${typeBadge(item.type)} <span style="font-size:12px;font-weight:700;margin-left:6px">${escapeHtml(item.label || 'Event')}</span></div>
+          <div style="font-size:11px;color:var(--text2)">${escapeHtml(item.message || '')}</div>
+          ${item.tx_hash ? `<div class="mono" style="font-size:10px;color:var(--text3);margin-top:4px">TX: ${escapeHtml(item.tx_hash)}</div>` : ''}
+          <div class="mono" style="font-size:10px;color:var(--text3);margin-top:4px">${fmtDate(item.timestamp)}</div>
+        </div>
+      </div>
+    `).join('')}</div>
+  `;
+}
+
+async function approveAdminAction(actionId) {
+  if (!confirm('Approve and execute this admin action?')) return;
+  const res = await fetch(`${API}/api/admin/actions/${actionId}/approve`, {
+    method:'POST',
+    credentials:'include'
+  });
+  const data = await res.json();
+  if (!res.ok) {
+    alert(data.error || 'Approval failed');
+    return;
+  }
+  alert('Admin action approved and executed.');
+  loadUsers();
+  loadPendingAdminActions();
   loadSystemHealth();
 }
 
@@ -1558,15 +1940,15 @@ function fmtSize(n) {
 
 function escapeHtml(value) {
   return String(value ?? '')
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#39;');
 }
 
 function escapeAttr(value) {
-  return escapeHtml(value).replace(/`/g, '&#96;');
+  return escapeHtml(value).replaceAll('`', '&#96;');
 }
 
 function statusBadge(s) {
@@ -1575,7 +1957,7 @@ function statusBadge(s) {
 }
 
 function roleBadge(r) {
-  const map = {admin:'purple',investigator:'info',analyst:'ok',court_authority:'warn'};
+  const map = {admin:'purple',investigator:'info',police:'info',analyst:'ok',court_authority:'warn'};
   return `<span class="badge badge-${map[r]||'info'}">${escapeHtml(String(r || '').replace('_',' '))}</span>`;
 }
 
@@ -1600,6 +1982,23 @@ function actionBadge(a) {
   };
   const klass = mapping[a] || 'info';
   return `<span class="badge badge-${klass}">${actionIconSvg(a)}${escapeHtml(a || 'Action')}</span>`;
+}
+
+function buildTxMetaSummary(txMetadata) {
+  const tsLabel = txMetadata.timestamp
+    ? new Date(txMetadata.timestamp * 1000).toLocaleString()
+    : '—';
+  return `Block: ${txMetadata.block_number ?? '—'} · Chain Time: ${tsLabel}`;
+}
+
+function superTimelineDotColor(type) {
+  if (type === 'system') {
+    return '#4f8ef7';
+  }
+  if (type === 'evidence') {
+    return '#fbbf24';
+  }
+  return '#34d399';
 }
 
 function actionIconSvg(a) {

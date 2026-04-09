@@ -1,0 +1,617 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Forensic Label Component</title>
+    <style>
+        :root {
+            --forensic-primary: #1a1a2e;
+            --forensic-border: #e74c3c;
+            --forensic-bg-light: #f8f9fa;
+            --status-green: #27ae60;
+            --status-red: #e74c3c;
+            --status-gray: #95a5a6;
+            --status-yellow: #f39c12;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+            min-height: 100vh;
+            padding: 40px 20px;
+        }
+
+        .demo-container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .demo-title {
+            font-size: 28px;
+            font-weight: 700;
+            margin-bottom: 10px;
+            color: var(--forensic-primary);
+        }
+
+        .demo-subtitle {
+            color: #666;
+            margin-bottom: 40px;
+            font-size: 14px;
+        }
+
+        .demo-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+            gap: 30px;
+            margin-bottom: 50px;
+        }
+
+        /* ============ FORENSIC LABEL COMPONENT ============ */
+        .forensic-label {
+            background: white;
+            border: 3px solid var(--forensic-border);
+            border-radius: 4px;
+            padding: 0;
+            box-shadow: 
+                0 4px 6px rgba(0, 0, 0, 0.1),
+                inset 0 1px 3px rgba(255, 255, 255, 0.5);
+            max-width: 100%;
+            font-family: 'Courier New', monospace;
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+
+        .forensic-label:hover {
+            transform: translateY(-2px);
+            box-shadow: 
+                0 8px 12px rgba(0, 0, 0, 0.15),
+                inset 0 1px 3px rgba(255, 255, 255, 0.5);
+        }
+
+        /* Header Section */
+        .forensic-label__header {
+            background: var(--forensic-primary);
+            color: white;
+            padding: 12px 16px;
+            border-bottom: 2px solid var(--forensic-border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .forensic-label__title {
+            font-size: 11px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: var(--forensic-border);
+        }
+
+        .forensic-label__barcode {
+            width: 40px;
+            height: 20px;
+            background: repeating-linear-gradient(
+                90deg,
+                #333 0,
+                #333 2px,
+                white 2px,
+                white 4px,
+                #333 4px,
+                #333 5px,
+                white 5px,
+                white 9px
+            );
+            border: 1px solid #333;
+            border-radius: 2px;
+        }
+
+        /* Content Section */
+        .forensic-label__content {
+            padding: 16px 16px;
+        }
+
+        /* ID Section */
+        .forensic-label__id-section {
+            margin-bottom: 14px;
+        }
+
+        .forensic-label__id-label {
+            display: block;
+            font-size: 10px;
+            font-weight: 600;
+            text-transform: uppercase;
+            color: #666;
+            letter-spacing: 0.8px;
+            margin-bottom: 4px;
+        }
+
+        .forensic-label__id {
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+            font-weight: 700;
+            color: var(--forensic-primary);
+            background: var(--forensic-bg-light);
+            padding: 8px 10px;
+            border-radius: 3px;
+            border: 1px solid #ddd;
+            word-break: break-all;
+            letter-spacing: 1px;
+        }
+
+        /* Status Section */
+        .forensic-label__status-section {
+            margin-bottom: 14px;
+        }
+
+        .forensic-label__status-label {
+            display: block;
+            font-size: 10px;
+            font-weight: 600;
+            text-transform: uppercase;
+            color: #666;
+            letter-spacing: 0.8px;
+            margin-bottom: 6px;
+        }
+
+        .forensic-label__badge {
+            display: inline-block;
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-size: 11px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: white;
+            transition: all 0.2s ease;
+        }
+
+        .forensic-label__badge--available {
+            background: var(--status-green);
+            box-shadow: 0 2px 8px rgba(39, 174, 96, 0.3);
+        }
+
+        .forensic-label__badge--pending {
+            background: var(--status-yellow);
+            box-shadow: 0 2px 8px rgba(243, 156, 18, 0.3);
+        }
+
+        .forensic-label__badge--sealed {
+            background: var(--status-red);
+            box-shadow: 0 2px 8px rgba(231, 76, 60, 0.3);
+        }
+
+        .forensic-label__badge--tampered {
+            background: #c0392b;
+            box-shadow: 0 2px 8px rgba(192, 57, 43, 0.3);
+        }
+
+        .forensic-label__badge--offline {
+            background: var(--status-gray);
+            box-shadow: 0 2px 8px rgba(149, 165, 166, 0.3);
+        }
+
+        /* Custodian Section */
+        .forensic-label__custodian-section {
+            padding-top: 12px;
+            border-top: 1px dashed #ddd;
+        }
+
+        .forensic-label__custodian-label {
+            display: block;
+            font-size: 10px;
+            font-weight: 600;
+            text-transform: uppercase;
+            color: #666;
+            letter-spacing: 0.8px;
+            margin-bottom: 6px;
+        }
+
+        .forensic-label__custodian {
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--forensic-primary);
+            padding: 6px 8px;
+            background: var(--forensic-bg-light);
+            border-radius: 3px;
+            border-left: 3px solid var(--forensic-border);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .forensic-label__custodian-icon {
+            width: 16px;
+            height: 16px;
+            background: var(--forensic-primary);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 9px;
+            font-weight: bold;
+        }
+
+        .forensic-label__custodian-name {
+            flex: 1;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        /* Footer Section */
+        .forensic-label__footer {
+            background: var(--forensic-bg-light);
+            padding: 8px 16px;
+            border-top: 1px solid #ddd;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 9px;
+            color: #999;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .forensic-label__timestamp {
+            font-family: 'Courier New', monospace;
+            font-size: 9px;
+        }
+
+        /* Responsive */
+        @media (max-width: 600px) {
+            .forensic-label__header {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 8px;
+            }
+
+            .forensic-label {
+                border-width: 2px;
+            }
+
+            .demo-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        /* ============ DEMO STYLES ============ */
+        .demo-section {
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        }
+
+        .demo-section-title {
+            font-size: 16px;
+            font-weight: 700;
+            margin-bottom: 20px;
+            color: var(--forensic-primary);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .code-block {
+            background: #f5f5f5;
+            padding: 15px;
+            border-radius: 4px;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            overflow-x: auto;
+            border-left: 3px solid var(--forensic-border);
+            margin-bottom: 20px;
+        }
+
+        .demo-note {
+            background: #fff3cd;
+            padding: 12px 15px;
+            border-radius: 4px;
+            border-left: 4px solid #ffc107;
+            font-size: 13px;
+            color: #856404;
+            margin-top: 15px;
+        }
+    </style>
+</head>
+<body>
+    <div class="demo-container">
+        <h1 class="demo-title">🔬 Forensic Label Component</h1>
+        <p class="demo-subtitle">Professional evidence tag design with dynamic status indicators</p>
+
+        <div class="demo-grid">
+            <!-- Example 1: Available (Green) -->
+            <div class="forensic-label">
+                <div class="forensic-label__header">
+                    <span class="forensic-label__title">Forensic Evidence</span>
+                    <div class="forensic-label__barcode"></div>
+                </div>
+                <div class="forensic-label__content">
+                    <div class="forensic-label__id-section">
+                        <div class="forensic-label__id-label">Evidence ID</div>
+                        <div class="forensic-label__id">EV-A7F2K9M1</div>
+                    </div>
+                    <div class="forensic-label__status-section">
+                        <div class="forensic-label__status-label">Status</div>
+                        <span class="forensic-label__badge forensic-label__badge--available">✓ Available</span>
+                    </div>
+                    <div class="forensic-label__custodian-section">
+                        <div class="forensic-label__custodian-label">Current Custodian</div>
+                        <div class="forensic-label__custodian">
+                            <div class="forensic-label__custodian-icon">DM</div>
+                            <div class="forensic-label__custodian-name">Detective Mike Johnson</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="forensic-label__footer">
+                    <span>Case ID: C-2026-001847</span>
+                    <span class="forensic-label__timestamp">2026-04-09</span>
+                </div>
+            </div>
+
+            <!-- Example 2: Pending Witness (Yellow) -->
+            <div class="forensic-label">
+                <div class="forensic-label__header">
+                    <span class="forensic-label__title">Forensic Evidence</span>
+                    <div class="forensic-label__barcode"></div>
+                </div>
+                <div class="forensic-label__content">
+                    <div class="forensic-label__id-section">
+                        <div class="forensic-label__id-label">Evidence ID</div>
+                        <div class="forensic-label__id">EV-B3X8Q2D4</div>
+                    </div>
+                    <div class="forensic-label__status-section">
+                        <div class="forensic-label__status-label">Status</div>
+                        <span class="forensic-label__badge forensic-label__badge--pending">⧐ Pending Witness</span>
+                    </div>
+                    <div class="forensic-label__custodian-section">
+                        <div class="forensic-label__custodian-label">Current Custodian</div>
+                        <div class="forensic-label__custodian">
+                            <div class="forensic-label__custodian-icon">AL</div>
+                            <div class="forensic-label__custodian-name">Analyst Linda Chen</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="forensic-label__footer">
+                    <span>Case ID: C-2026-001858</span>
+                    <span class="forensic-label__timestamp">2026-04-08</span>
+                </div>
+            </div>
+
+            <!-- Example 3: Sealed (Red) -->
+            <div class="forensic-label">
+                <div class="forensic-label__header">
+                    <span class="forensic-label__title">Forensic Evidence</span>
+                    <div class="forensic-label__barcode"></div>
+                </div>
+                <div class="forensic-label__content">
+                    <div class="forensic-label__id-section">
+                        <div class="forensic-label__id-label">Evidence ID</div>
+                        <div class="forensic-label__id">EV-R5P7N1X6</div>
+                    </div>
+                    <div class="forensic-label__status-section">
+                        <div class="forensic-label__status-label">Status</div>
+                        <span class="forensic-label__badge forensic-label__badge--sealed">🔒 Court Sealed</span>
+                    </div>
+                    <div class="forensic-label__custodian-section">
+                        <div class="forensic-label__custodian-label">Current Custodian</div>
+                        <div class="forensic-label__custodian">
+                            <div class="forensic-label__custodian-icon">CL</div>
+                            <div class="forensic-label__custodian-name">Court Liaison Officer</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="forensic-label__footer">
+                    <span>Case ID: C-2026-001821</span>
+                    <span class="forensic-label__timestamp">2026-03-15</span>
+                </div>
+            </div>
+
+            <!-- Example 4: Tampered (Dark Red) -->
+            <div class="forensic-label">
+                <div class="forensic-label__header">
+                    <span class="forensic-label__title">Forensic Evidence</span>
+                    <div class="forensic-label__barcode"></div>
+                </div>
+                <div class="forensic-label__content">
+                    <div class="forensic-label__id-section">
+                        <div class="forensic-label__id-label">Evidence ID</div>
+                        <div class="forensic-label__id">EV-T2J9V3K8</div>
+                    </div>
+                    <div class="forensic-label__status-section">
+                        <div class="forensic-label__status-label">Status</div>
+                        <span class="forensic-label__badge forensic-label__badge--tampered">⚠ Tampered</span>
+                    </div>
+                    <div class="forensic-label__custodian-section">
+                        <div class="forensic-label__custodian-label">Current Custodian</div>
+                        <div class="forensic-label__custodian">
+                            <div class="forensic-label__custodian-icon">AO</div>
+                            <div class="forensic-label__custodian-name">Admin Officer</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="forensic-label__footer">
+                    <span>Case ID: C-2026-001739</span>
+                    <span class="forensic-label__timestamp">2026-02-28</span>
+                </div>
+            </div>
+
+            <!-- Example 5: Offline (Gray) -->
+            <div class="forensic-label">
+                <div class="forensic-label__header">
+                    <span class="forensic-label__title">Forensic Evidence</span>
+                    <div class="forensic-label__barcode"></div>
+                </div>
+                <div class="forensic-label__content">
+                    <div class="forensic-label__id-section">
+                        <div class="forensic-label__id-label">Evidence ID</div>
+                        <div class="forensic-label__id">EV-L4F6W2B9</div>
+                    </div>
+                    <div class="forensic-label__status-section">
+                        <div class="forensic-label__status-label">Status</div>
+                        <span class="forensic-label__badge forensic-label__badge--offline">⊘ Offline</span>
+                    </div>
+                    <div class="forensic-label__custodian-section">
+                        <div class="forensic-label__custodian-label">Current Custodian</div>
+                        <div class="forensic-label__custodian">
+                            <div class="forensic-label__custodian-icon">PM</div>
+                            <div class="forensic-label__custodian-name">Police Manager</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="forensic-label__footer">
+                    <span>Case ID: C-2026-001905</span>
+                    <span class="forensic-label__timestamp">2026-04-09</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Usage Section -->
+        <div class="demo-section">
+            <h2 class="demo-section-title">Usage Instructions</h2>
+            <p style="margin-bottom: 15px; color: #555; line-height: 1.6;">
+                To integrate the Forensic Label component into your application:
+            </p>
+            <div class="code-block">
+&lt;div class="forensic-label"&gt;
+  &lt;div class="forensic-label__header"&gt;
+    &lt;span class="forensic-label__title"&gt;Forensic Evidence&lt;/span&gt;
+    &lt;div class="forensic-label__barcode"&gt;&lt;/div&gt;
+  &lt;/div&gt;
+  &lt;div class="forensic-label__content"&gt;
+    &lt;div class="forensic-label__id-section"&gt;
+      &lt;label class="forensic-label__id-label"&gt;Evidence ID&lt;/label&gt;
+      &lt;div class="forensic-label__id"&gt;EV-A7F2K9M1&lt;/div&gt;
+    &lt;/div&gt;
+    &lt;div class="forensic-label__status-section"&gt;
+      &lt;label class="forensic-label__status-label"&gt;Status&lt;/label&gt;
+      &lt;!-- Use: forensic-label__badge--available | --pending | --sealed | --tampered | --offline --&gt;
+      &lt;span class="forensic-label__badge forensic-label__badge--available"&gt;✓ Available&lt;/span&gt;
+    &lt;/div&gt;
+    &lt;div class="forensic-label__custodian-section"&gt;
+      &lt;label class="forensic-label__custodian-label"&gt;Current Custodian&lt;/label&gt;
+      &lt;div class="forensic-label__custodian"&gt;
+        &lt;div class="forensic-label__custodian-icon"&gt;DM&lt;/div&gt;
+        &lt;div class="forensic-label__custodian-name"&gt;Detective Mike&lt;/div&gt;
+      &lt;/div&gt;
+    &lt;/div&gt;
+  &lt;/div&gt;
+  &lt;div class="forensic-label__footer"&gt;
+    &lt;span&gt;Case ID: C-2026-001847&lt;/span&gt;
+    &lt;span class="forensic-label__timestamp"&gt;2026-04-09&lt;/span&gt;
+  &lt;/div&gt;
+&lt;/div&gt;
+            </div>
+
+            <div class="demo-note">
+                <strong>Status Badge Classes:</strong>
+                <ul style="margin-left: 20px; margin-top: 8px;">
+                    <li><code>forensic-label__badge--available</code> — Green (evidence in custody)</li>
+                    <li><code>forensic-label__badge--pending</code> — Yellow (awaiting witness/action)</li>
+                    <li><code>forensic-label__badge--sealed</code> — Red (court sealed/finalized)</li>
+                    <li><code>forensic-label__badge--tampered</code> — Dark Red (integrity issue)</li>
+                    <li><code>forensic-label__badge--offline</code> — Gray (blockchain offline)</li>
+                </ul>
+            </div>
+
+            <h3 style="margin-top: 25px; margin-bottom: 15px; font-size: 14px; font-weight: 600; color: var(--forensic-primary);">JavaScript Integration</h3>
+            <div class="code-block">
+// Function to dynamically create a Forensic Label
+function createForensicLabel(evidenceData) {
+  const { id, status, custodian, caseId, date } = evidenceData;
+  
+  const statusMap = {
+    'available': { class: 'forensic-label__badge--available', text: '✓ Available' },
+    'pending_witness': { class: 'forensic-label__badge--pending', text: '⧐ Pending Witness' },
+    'sealed': { class: 'forensic-label__badge--sealed', text: '🔒 Court Sealed' },
+    'tampered': { class: 'forensic-label__badge--tampered', text: '⚠ Tampered' },
+    'offline': { class: 'forensic-label__badge--offline', text: '⊘ Offline' }
+  };
+
+  const statusInfo = statusMap[status] || statusMap['offline'];
+  const initials = custodian.split(' ').map(n => n[0]).join('');
+
+  return `
+    &lt;div class="forensic-label"&gt;
+      &lt;div class="forensic-label__header"&gt;
+        &lt;span class="forensic-label__title"&gt;Forensic Evidence&lt;/span&gt;
+        &lt;div class="forensic-label__barcode"&gt;&lt;/div&gt;
+      &lt;/div&gt;
+      &lt;div class="forensic-label__content"&gt;
+        &lt;div class="forensic-label__id-section"&gt;
+          &lt;label class="forensic-label__id-label"&gt;Evidence ID&lt;/label&gt;
+          &lt;div class="forensic-label__id"&gt;${ id }&lt;/div&gt;
+        &lt;/div&gt;
+        &lt;div class="forensic-label__status-section"&gt;
+          &lt;label class="forensic-label__status-label"&gt;Status&lt;/label&gt;
+          &lt;span class="forensic-label__badge ${ statusInfo.class }"&gt;${ statusInfo.text }&lt;/span&gt;
+        &lt;/div&gt;
+        &lt;div class="forensic-label__custodian-section"&gt;
+          &lt;label class="forensic-label__custodian-label"&gt;Current Custodian&lt;/label&gt;
+          &lt;div class="forensic-label__custodian"&gt;
+            &lt;div class="forensic-label__custodian-icon"&gt;${ initials }&lt;/div&gt;
+            &lt;div class="forensic-label__custodian-name"&gt;${ custodian }&lt;/div&gt;
+          &lt;/div&gt;
+        &lt;/div&gt;
+      &lt;/div&gt;
+      &lt;div class="forensic-label__footer"&gt;
+        &lt;span&gt;Case ID: ${ caseId }&lt;/span&gt;
+        &lt;span class="forensic-label__timestamp"&gt;${ date }&lt;/span&gt;
+      &lt;/div&gt;
+    &lt;/div&gt;
+  `;
+}
+
+// Usage
+const label = createForensicLabel({
+  id: 'EV-A7F2K9M1',
+  status: 'available',
+  custodian: 'Detective Mike Johnson',
+  caseId: 'C-2026-001847',
+  date: '2026-04-09'
+});
+
+document.getElementById('label-container').innerHTML = label;
+            </div>
+        </div>
+
+        <!-- Features Section -->
+        <div class="demo-section" style="margin-top: 30px;">
+            <h2 class="demo-section-title">Key Features</h2>
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 20px;">
+                <div style="padding: 15px; background: #f8f9fa; border-radius: 4px; border-left: 4px solid var(--forensic-border);">
+                    <strong style="color: var(--forensic-primary);">🔐 Physical Tag Appearance</strong>
+                    <p style="margin-top: 8px; color: #666; font-size: 13px;">Mimics real forensic evidence labels with professional borders and styling.</p>
+                </div>
+                <div style="padding: 15px; background: #f8f9fa; border-radius: 4px; border-left: 4px solid var(--forensic-border);">
+                    <strong style="color: var(--forensic-primary);">💻 Monospaced ID</strong>
+                    <p style="margin-top: 8px; color: #666; font-size: 13px;">Evidence IDs displayed in 'Courier New' monospaced font for clarity.</p>
+                </div>
+                <div style="padding: 15px; background: #f8f9fa; border-radius: 4px; border-left: 4px solid var(--forensic-border);">
+                    <strong style="color: var(--forensic-primary);">🎨 Color-Coded Status</strong>
+                    <p style="margin-top: 8px; color: #666; font-size: 13px;">5 status states with distinct colors for quick visual identification.</p>
+                </div>
+                <div style="padding: 15px; background: #f8f9fa; border-radius: 4px; border-left: 4px solid var(--forensic-border);">
+                    <strong style="color: var(--forensic-primary);">👤 Custodian Info</strong>
+                    <p style="margin-top: 8px; color: #666; font-size: 13px;">Shows current handler with initials avatar and full name.</p>
+                </div>
+                <div style="padding: 15px; background: #f8f9fa; border-radius: 4px; border-left: 4px solid var(--forensic-border);">
+                    <strong style="color: var(--forensic-primary);">📱 Responsive Design</strong>
+                    <p style="margin-top: 8px; color: #666; font-size: 13px;">Works seamlessly on desktop and mobile devices.</p>
+                </div>
+                <div style="padding: 15px; background: #f8f9fa; border-radius: 4px; border-left: 4px solid var(--forensic-border);">
+                    <strong style="color: var(--forensic-primary);">✨ Interactive Hover</strong>
+                    <p style="margin-top: 8px; color: #666; font-size: 13px;">Subtle lift effect on hover for better UX feedback.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

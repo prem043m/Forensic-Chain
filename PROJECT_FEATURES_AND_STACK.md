@@ -22,6 +22,22 @@ ForensicChain is a blockchain-backed digital evidence management system. It lets
 - Evidence detail view with chain-of-custody history.
 - Admin dashboard features for users, stats, logs, and contract deployment.
 
+## Authority-Grade Legal/Forensic Workflows Implemented
+- Two-factor seizure handshake for police/investigator uploads:
+	upload now requires case ID, warrant number, GPS coordinates, source device ID, and a second-user witness.
+- Witness attestation endpoint:
+	seizure starts as pending and only becomes active/on-chain after the designated witness signs.
+- Private evidence + subpoena-style access trail:
+	investigators can request access with reason; owner can approve/reject; every request is logged for defense/audit visibility.
+- Non-destructive evidence branching for analysts:
+	analysts can create derived child evidence while preserving the original parent hash and linking parent-child lineage.
+- Court sealing/finality:
+	court authority can seal evidence; once sealed, mutable operations (status/custody mutations and branches) are blocked.
+- One-time public verification links:
+	court authority can generate expiring one-time verification tokens for third-party validation without exposing internal databases.
+- Multi-admin break-glass control:
+	deactivating investigator accounts now creates a pending admin action that requires approval from a second admin.
+
 ## Potential Feature Directions
 - Restrict admin-only actions more strictly and add approval flows for privileged accounts.
 - Add CSRF protection and stronger session hardening.

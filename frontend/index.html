@@ -210,11 +210,11 @@
     <div class="panel active" id="panel-login">
       <div class="alert alert-err" id="login-err"></div>
       <div class="form-group">
-        <label>Email</label>
+        <label for="login-email">Email</label>
         <input type="email" id="login-email" placeholder="investigator@agency.gov">
       </div>
       <div class="form-group">
-        <label>Password</label>
+        <label for="login-pass">Password</label>
         <input type="password" id="login-pass" placeholder="Enter your password">
       </div>
       <button class="btn" onclick="doLogin()">Sign In</button>
@@ -225,31 +225,32 @@
       <div class="alert alert-err" id="reg-err"></div>
       <div class="alert alert-ok" id="reg-ok"></div>
       <div class="form-group">
-        <label>Full Name</label>
+        <label for="reg-name">Full Name</label>
         <input type="text" id="reg-name" placeholder="Det. John Smith">
       </div>
       <div class="form-group">
-        <label>Email</label>
+        <label for="reg-email">Email</label>
         <input type="email" id="reg-email" placeholder="name@agency.gov">
       </div>
       <div class="form-group">
-        <label>Password</label>
+        <label for="reg-pass">Password</label>
         <input type="password" id="reg-pass" placeholder="Min 12 chars with upper/lower/number/symbol">
       </div>
       <div class="form-group">
-        <label>Confirm Password</label>
+        <label for="reg-pass-confirm">Confirm Password</label>
         <input type="password" id="reg-pass-confirm" placeholder="Re-enter your password">
       </div>
       <div class="form-group">
-        <label>Role</label>
+        <label for="reg-role">Role</label>
         <select id="reg-role">
           <option value="investigator">Investigator</option>
+          <option value="police">Police Officer</option>
           <option value="analyst">Forensic Analyst</option>
           <option value="court_authority">Court Authority</option>
         </select>
       </div>
       <div class="form-group">
-        <label>Wallet Address (optional)</label>
+        <label for="reg-wallet">Wallet Address (optional)</label>
         <input type="text" id="reg-wallet" placeholder="0x...">
       </div>
       <button class="btn" onclick="doRegister()">Create Account</button>
@@ -261,12 +262,12 @@
       <div class="alert alert-ok" id="forgot-ok"></div>
       <p style="color: var(--text2); font-size: 13px; margin-bottom: 16px;">Enter your email address and we'll send you a link to reset your password.</p>
       <div class="form-group">
-        <label>Email</label>
+        <label for="forgot-email">Email</label>
         <input type="email" id="forgot-email" placeholder="your@email.com">
       </div>
       <button class="btn" onclick="doForgotPassword()">Send Reset Link</button>
       <p style="text-align: center; margin-top: 15px;">
-        <a href="#" onclick="switchTab('login'); return false;" style="color: var(--blue); text-decoration: none; font-size: 12px;">Back to Sign In</a>
+        <button type="button" onclick="switchTab('login')" style="color: var(--blue); text-decoration: none; font-size: 12px; background:none; border:none; cursor:pointer;">Back to Sign In</button>
       </p>
     </div>
   </div>
@@ -307,7 +308,7 @@ async function doLogin() {
   });
   const data = await res.json();
   if (res.ok) {
-    window.location.href = '/dashboard.html';
+    globalThis.location.href = '/dashboard.html';
   } else {
     showAlert('login-err', data.error || 'Login failed');
   }
@@ -358,9 +359,16 @@ async function doForgotPassword() {
 }
 
 // Auto-redirect if already logged in
-fetch('/api/auth/me', {credentials: 'include'})
-  .then(r => r.ok && (window.location.href = '/dashboard.html'))
-  .catch(() => {});
+document.addEventListener('DOMContentLoaded', async () => {
+  try {
+    const r = await fetch('/api/auth/me', {credentials: 'include'});
+    if (r.ok) {
+      globalThis.location.href = '/dashboard.html';
+    }
+  } catch (err) {
+    console.debug('Initial session probe failed', err);
+  }
+});
 
 // Enter key support
 document.addEventListener('keydown', e => {

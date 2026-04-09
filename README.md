@@ -229,6 +229,47 @@ All endpoints require session authentication (login first).
 
 ---
 
+## Authority-Grade Protocols (New)
+
+1. Seizure Handshake (Police/Investigator)
+- Upload requires: case ID, warrant number, GPS coordinates, source device ID, and a witness user.
+- Upload enters pending-witness state and is finalized only after witness attestation.
+
+2. Non-Destructive Analyst Branching
+- Analysts can create derived child evidence artifacts linked to a parent evidence ID.
+- Original evidence remains untouched while lineage is preserved in custody metadata.
+
+3. Subpoena-Style Private Access
+- Evidence can be marked private.
+- Non-owner access requires a reasoned access request and owner review (approve/reject), with audit logging.
+
+4. Court Sealing And Finality
+- Court authority can seal evidence.
+- Sealed evidence is immutable for metadata/custody-modifying operations.
+
+5. Public One-Time Verification Links
+- Court authority can issue expiring one-time links for external verification via file/hash comparison.
+
+6. Multi-Sig Admin Deactivation
+- Disabling investigator accounts now requires two-admin flow:
+  request by admin A, approval by admin B.
+
+### New/Updated API Endpoints
+- `GET /api/users/witness-candidates`
+- `POST /api/upload_evidence` (now seizure handshake initiation)
+- `POST /api/seizure/attest`
+- `POST /api/evidence/branch`
+- `POST /api/evidence/<id>/request-access`
+- `GET /api/evidence/access-requests`
+- `POST /api/evidence/access-requests/<request_id>/review`
+- `POST /api/evidence/<id>/seal`
+- `POST /api/evidence/<id>/verification-link`
+- `POST /api/public/verify?token=...`
+- `GET /api/admin/actions/pending`
+- `POST /api/admin/actions/<action_id>/approve`
+
+---
+
 ## Smart Contract Functions
 
 ```solidity

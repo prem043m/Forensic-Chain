@@ -1,14 +1,16 @@
 import hashlib
+import hmac
 import mimetypes
 import os
 import shutil
 import secrets
 import smtplib
 import uuid
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from functools import wraps
+import importlib
 
 import jwt
 from flask import Flask, jsonify, request, send_from_directory, session
@@ -24,11 +26,23 @@ else:
     from blockchain import blockchain
 
 
-APP_STARTED_AT = datetime.utcnow()
+FRONTEND_DIR = "../frontend"
+ERR_INVALID_REQUEST_BODY = "Invalid request body"
+ERR_USER_NOT_FOUND = "User not found"
+ERR_EVIDENCE_NOT_FOUND = "Evidence not found"
+ERR_EVIDENCE_ID_REQUIRED = "evidence_id required"
+BCRYPT_AVAILABLE = importlib.util.find_spec("bcrypt") is not None
+
+
+def now_utc():
+    return datetime.now(timezone.utc)
+
+
+APP_STARTED_AT = now_utc()
 
 
 # App setup
-app = Flask(__name__, static_folder="../frontend", template_folder="../frontend")
+app = Flask(__name__, static_folder=FRONTEND_DIR, template_folder=FRONTEND_DIR)
 app.secret_key = os.environ.get("SECRET_KEY") or os.urandom(32).hex()
 app.config["SESSION_COOKIE_HTTPONLY"] = True
 app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
@@ -170,6 +184,210 @@ def can_preview(filename):
     return infer_preview_kind(filename) != "none"
 
 
+def candidate_storage_names(evidence):
+    candidates = []
+    raw_name = (evidence.get("file_path") or "").strip()
+    if raw_name:
+        candidates.extend([raw_name, os.path.basename(raw_name)])
+
+    original_name = (evidence.get("file_name") or "").strip()
+    if original_name:
+        candidates.append(original_name)
+    return candidates, original_name
+
+
+def find_existing_storage_file(candidates):
+    seen = set()
+    for name in candidates:
+        normalized = (name or "").strip()
+        if not normalized or normalized in seen:
+            continue
+        seen.add(normalized)
+
+        abs_path = os.path.join(UPLOAD_FOLDER, normalized)
+        if os.path.exists(abs_path):
+            return normalized, abs_path
+    return None, None
+
+
+def find_storage_file_by_suffix(original_name):
+    if not original_name or not os.path.isdir(UPLOAD_FOLDER):
+        return None, None
+
+    lowered_original = original_name.lower()
+    for entry in os.listdir(UPLOAD_FOLDER):
+        entry_l = entry.lower()
+        if entry_l == lowered_original or entry_l.endswith("_" + lowered_original):
+            abs_path = os.path.join(UPLOAD_FOLDER, entry)
+            if os.path.exists(abs_path):
+                return entry, abs_path
+    return None, None
+
+
+def resolve_storage_file(evidence):
+    """Resolve file path from DB to an existing file in storage.
+
+    Returns tuple: (storage_name, absolute_path). When not found, returns (None, None).
+    """
+    candidates, original_name = candidate_storage_names(evidence)
+    storage_name, abs_path = find_existing_storage_file(candidates)
+    if abs_path:
+        return storage_name, abs_path
+    return find_storage_file_by_suffix(original_name)
+
+
+def extract_upload_form_fields():
+    return {
+        "case_id": request.form.get("case_id", "").strip(),
+        "warrant_number": request.form.get("warrant_number", "").strip(),
+        "source_gps": request.form.get("source_gps", "").strip(),
+        "source_device_id": request.form.get("source_device_id", "").strip(),
+        "witness_user_id": request.form.get("witness_user_id", "").strip(),
+        "is_private": parse_bool(request.form.get("is_private"), default=False),
+        "description": request.form.get("description", ""),
+    }
+
+
+def validate_seizure_form_fields(form_fields):
+    validations = {
+        "case_id": "case_id is required for legal seizure protocol",
+        "warrant_number": "warrant_number is required for legal seizure protocol",
+        "source_gps": "source_gps is required for legal seizure protocol",
+        "source_device_id": "source_device_id is required for legal seizure protocol",
+        "witness_user_id": "witness_user_id is required for two-factor seizure",
+    }
+    for field, message in validations.items():
+        if not form_fields.get(field):
+            return jsonify({"error": message}), 400
+    return None
+
+
+def load_witness_or_error(witness_user_id, uploader_id):
+    try:
+        witness_user_id_int = int(witness_user_id)
+    except ValueError:
+        return None, None, (jsonify({"error": "witness_user_id must be a valid user id"}), 400)
+
+    witness = db.get_user_by_id(witness_user_id_int)
+    if not witness or not witness.get("is_active", True):
+        return None, None, (jsonify({"error": "Selected witness is invalid or inactive"}), 400)
+    if witness["id"] == uploader_id:
+        return None, None, (jsonify({"error": "Witness must be a different user"}), 400)
+    return witness_user_id_int, witness, None
+
+
+def resolve_verify_input_or_error():
+    if "file" in request.files:
+        file = request.files["file"]
+        evidence_id = request.form.get("evidence_id")
+        if not evidence_id:
+            return None, None, (jsonify({"error": ERR_EVIDENCE_ID_REQUIRED}), 400)
+        return evidence_id, generate_hash_from_bytes(file.read()), None
+
+    body = request.get_json()
+    if not body:
+        return None, None, (jsonify({"error": ERR_INVALID_REQUEST_BODY}), 400)
+
+    evidence_id = body.get("evidence_id")
+    if not evidence_id:
+        return None, None, (jsonify({"error": ERR_EVIDENCE_ID_REQUIRED}), 400)
+
+    evidence = db.get_evidence_by_id(evidence_id)
+    if not evidence:
+        return None, None, (jsonify({"error": ERR_EVIDENCE_NOT_FOUND}), 404)
+
+    storage_name, file_path = resolve_storage_file(evidence)
+    if not file_path:
+        return None, None, (jsonify({"error": "Evidence file missing from storage"}), 404)
+
+    if storage_name != (evidence.get("file_path") or ""):
+        db.update_evidence_file_path(evidence_id, storage_name)
+
+    return evidence_id, generate_file_hash(file_path), None
+
+
+def db_fallback_verify_result(evidence_id, current_hash):
+    evidence = db.get_evidence_by_id(evidence_id)
+    if not evidence:
+        return None, (jsonify({"error": ERR_EVIDENCE_NOT_FOUND}), 404)
+    stored_hash = evidence["file_hash"]
+    return {
+        "intact": stored_hash.lower() == current_hash.lower(),
+        "stored_hash": stored_hash,
+        "current_hash": current_hash,
+        "evidence_id": evidence_id,
+        "source": "database",
+    }, None
+
+
+def append_system_timeline_events(timeline, system_logs, evidence_created_at):
+    evidence_day = evidence_created_at.date() if evidence_created_at else None
+    for entry in system_logs:
+        ts = entry.get("created_at")
+        if evidence_day and ts and ts.date() != evidence_day:
+            continue
+        timeline.append(
+            {
+                "type": "system",
+                "label": entry.get("event_type") or "SYSTEM_EVENT",
+                "message": entry.get("message") or "System event",
+                "timestamp": ts,
+            }
+        )
+
+
+def append_evidence_timeline_events(timeline, evidence_logs):
+    for entry in evidence_logs:
+        timeline.append(
+            {
+                "type": "evidence",
+                "label": entry.get("action") or "Evidence Action",
+                "message": entry.get("note") or "",
+                "timestamp": entry.get("created_at"),
+                "tx_hash": entry.get("tx_hash"),
+                "actor_name": entry.get("actor_name"),
+            }
+        )
+
+
+def append_blockchain_timeline_item(timeline, label, tx_meta, fallback_ts):
+    if not tx_meta:
+        return
+    timestamp = datetime.fromtimestamp(tx_meta["timestamp"]) if tx_meta.get("timestamp") else fallback_ts
+    timeline.append(
+        {
+            "type": "blockchain",
+            "label": label,
+            "message": f"Status={tx_meta.get('status')} Block={tx_meta.get('block_number')}",
+            "timestamp": timestamp,
+            "tx_hash": tx_meta.get("tx_hash"),
+        }
+    )
+
+
+def iter_unique_custody_tx_hashes(evidence_logs, seen_txs):
+    for entry in evidence_logs:
+        tx_hash = entry.get("tx_hash")
+        if not tx_hash or tx_hash in seen_txs:
+            continue
+        seen_txs.add(tx_hash)
+        yield entry, tx_hash
+
+
+def append_blockchain_timeline_events(timeline, evidence, evidence_logs):
+    seen_txs = set()
+    if evidence.get("tx_hash"):
+        initial_hash = evidence["tx_hash"]
+        seen_txs.add(initial_hash)
+        tx_meta, _ = blockchain.get_transaction_info(initial_hash)
+        append_blockchain_timeline_item(timeline, "Initial Registration", tx_meta, evidence.get("created_at"))
+
+    for entry, tx_hash in iter_unique_custody_tx_hashes(evidence_logs, seen_txs):
+        tx_meta, _ = blockchain.get_transaction_info(tx_hash)
+        label = f"Blockchain: {entry.get('action') or 'Event'}"
+        append_blockchain_timeline_item(timeline, label, tx_meta, entry.get("created_at"))
+
+
 def generate_file_hash(file_path):
     sha256 = hashlib.sha256()
     with open(file_path, "rb") as f:
@@ -180,6 +398,10 @@ def generate_file_hash(file_path):
 
 def generate_hash_from_bytes(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
+
+
+def hash_token(token: str) -> str:
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()
 
 
 def is_strong_password(password: str) -> bool:
@@ -193,34 +415,30 @@ def is_strong_password(password: str) -> bool:
 
 
 def hash_password(password: str) -> str:
-    try:
-        import bcrypt
-
+    if BCRYPT_AVAILABLE:
+        bcrypt = importlib.import_module("bcrypt")
         salt = bcrypt.gensalt(rounds=12)
         hashed = bcrypt.hashpw(password.encode("utf-8"), salt)
         return hashed.decode("utf-8")
-    except Exception:
-        return generate_password_hash(password)
+    return generate_password_hash(password)
 
 
 def verify_password(password: str, hashed_password: str) -> bool:
-    try:
-        import bcrypt
-
+    if BCRYPT_AVAILABLE:
+        bcrypt = importlib.import_module("bcrypt")
         if hashed_password.startswith("$2"):
             return bcrypt.checkpw(password.encode("utf-8"), hashed_password.encode("utf-8"))
-        return check_password_hash(hashed_password, password)
-    except Exception:
-        return check_password_hash(hashed_password, password)
+    return check_password_hash(hashed_password, password)
 
 
 def generate_jwt_token(user_id, role):
     try:
+        issued_at = now_utc()
         payload = {
             "user_id": user_id,
             "role": role,
-            "iat": datetime.utcnow(),
-            "exp": datetime.utcnow() + timedelta(hours=JWT_EXPIRATION_HOURS),
+            "iat": issued_at,
+            "exp": issued_at + timedelta(hours=JWT_EXPIRATION_HOURS),
         }
         return jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
     except Exception as exc:
@@ -313,12 +531,21 @@ def jwt_role_required(*roles):
     return decorator
 
 
-def build_preview_metadata(evidence_id, file_name):
+def build_preview_metadata(evidence_id, file_name, storage_name=None):
     kind = infer_preview_kind(file_name)
+    storage_available = True
+    if storage_name is not None:
+        normalized_storage = str(storage_name).strip()
+        storage_available = bool(normalized_storage) and os.path.exists(
+            os.path.join(UPLOAD_FOLDER, normalized_storage)
+        )
+
+    preview_supported = kind != "none" and storage_available
     return {
-        "supported": kind != "none",
+        "supported": preview_supported,
         "kind": kind,
-        "url": f"/api/evidence/{evidence_id}/file" if kind != "none" else None,
+        "storage_available": storage_available,
+        "url": f"/api/evidence/{evidence_id}/file" if preview_supported else None,
     }
 
 
@@ -330,6 +557,40 @@ def offline_tx_meta():
         "status": "offline",
         "source": "fallback",
     }
+
+
+def parse_bool(value, default=False):
+    if value is None:
+        return default
+    return str(value).strip().lower() in {"1", "true", "yes", "on"}
+
+
+def user_can_access_evidence(user, evidence):
+    if user["role"] in {"admin", "court_authority"}:
+        return True
+
+    if user["role"] == "police":
+        # Police can always access their own uploads; cross-department access requires token grant.
+        if int(evidence.get("uploaded_by") or 0) == int(user["id"]):
+            return True
+        return db.has_police_access_grant(evidence["evidence_id"], user["id"])
+
+    if user["role"] in {"investigator", "analyst"}:
+        if int(evidence.get("uploaded_by") or 0) == int(user["id"]):
+            return True
+        return db.has_approved_access(evidence["evidence_id"], user["id"])
+
+    if not evidence.get("is_private"):
+        return True
+
+    if int(evidence.get("uploaded_by") or 0) == int(user["id"]):
+        return True
+
+    return db.has_approved_access(evidence["evidence_id"], user["id"])
+
+
+def evidence_is_sealed(evidence):
+    return bool(evidence and evidence.get("is_sealed"))
 
 
 def get_system_health_snapshot():
@@ -361,7 +622,7 @@ def get_system_health_snapshot():
                     continue
 
     disk_info = shutil.disk_usage(UPLOAD_FOLDER)
-    uptime_seconds = int((datetime.utcnow() - APP_STARTED_AT).total_seconds())
+    uptime_seconds = int((now_utc() - APP_STARTED_AT).total_seconds())
 
     return {
         "status": "healthy" if db_connected else "degraded",
@@ -403,14 +664,14 @@ def request_too_large(_error):
 
 
 # Frontend routes
-@app.route("/")
+@app.route("/", methods=["GET"])
 def index():
-    return send_from_directory("../frontend", "index.html")
+    return send_from_directory(FRONTEND_DIR, "index.html")
 
 
-@app.route("/<path:filename>")
+@app.route("/<path:filename>", methods=["GET"])
 def static_files(filename):
-    return send_from_directory("../frontend", filename)
+    return send_from_directory(FRONTEND_DIR, filename)
 
 
 @app.route("/health", methods=["GET"])
@@ -447,13 +708,13 @@ def health():
 def register():
     data = request.get_json()
     if not data:
-        return jsonify({"error": "Invalid request body"}), 400
+        return jsonify({"error": ERR_INVALID_REQUEST_BODY}), 400
 
     required = ["name", "email", "password", "password_confirm", "role"]
     if not all(k in data for k in required):
         return jsonify({"error": "Missing required fields"}), 400
 
-    valid_roles = ["investigator", "analyst", "court_authority"]
+    valid_roles = ["investigator", "police", "analyst", "court_authority"]
     if data["role"] == "admin":
         return jsonify({"error": "Admin registration is disabled. Configure one private admin via environment variables."}), 403
     if data["role"] not in valid_roles:
@@ -475,6 +736,13 @@ def register():
     return jsonify({"message": "User registered successfully"}), 201
 
 
+@app.route("/api/users/witness-candidates", methods=["GET"])
+@login_required
+def witness_candidates():
+    users = db.get_user_witness_candidates(exclude_user_id=session["user_id"])
+    return jsonify(users)
+
+
 @app.route("/api/auth/login", methods=["POST"])
 def login():
     data = request.get_json()
@@ -492,6 +760,12 @@ def login():
     session["role"] = user["role"]
 
     db.update_last_login(user["id"])
+    db.add_system_log(
+        user["id"],
+        "USER_LOGIN",
+        f"User logged in: {user['email']}",
+        f"role={user['role']}",
+    )
     send_login_notification(user["email"], user["name"])
 
     jwt_token = generate_jwt_token(user["id"], user["role"])
@@ -517,6 +791,11 @@ def login():
 
 @app.route("/api/auth/logout", methods=["POST"])
 def logout():
+    if "user_id" in session:
+        try:
+            db.add_system_log(session["user_id"], "USER_LOGOUT", "User logged out", "")
+        except Exception:
+            app.logger.exception("Failed to persist logout system log")
     session.clear()
     return jsonify({"message": "Logged out"})
 
@@ -569,7 +848,7 @@ def reset_password_confirm():
 def me():
     user = db.get_user_by_id(session["user_id"])
     if not user:
-        return jsonify({"error": "User not found"}), 404
+        return jsonify({"error": ERR_USER_NOT_FOUND}), 404
 
     return jsonify(
         {
@@ -587,7 +866,7 @@ def me():
 def validate_token():
     user = db.get_user_by_id(request.user_id)
     if not user:
-        return jsonify({"error": "User not found"}), 404
+        return jsonify({"error": ERR_USER_NOT_FOUND}), 404
 
     return jsonify(
         {
@@ -623,6 +902,13 @@ def refresh_token():
 @app.route("/api/upload_evidence", methods=["POST"])
 @login_required
 def upload_evidence():
+    user = db.get_user_by_id(session["user_id"])
+    if not user:
+        return jsonify({"error": ERR_USER_NOT_FOUND}), 404
+
+    if user["role"] not in ["investigator", "police"]:
+        return jsonify({"error": "Only police/investigator roles can initiate legal seizure uploads"}), 403
+
     if "file" not in request.files:
         return jsonify({"error": "No file provided"}), 400
 
@@ -656,8 +942,17 @@ def upload_evidence():
             }
         ), 409
 
-    case_id = request.form.get("case_id", "CASE-UNKNOWN")
-    description = request.form.get("description", "")
+    form_fields = extract_upload_form_fields()
+    form_error = validate_seizure_form_fields(form_fields)
+    if form_error:
+        return form_error
+
+    witness_user_id_int, witness, witness_error = load_witness_or_error(
+        form_fields["witness_user_id"],
+        user["id"],
+    )
+    if witness_error:
+        return witness_error
 
     evidence_id = "EV-" + uuid.uuid4().hex[:8].upper()
     timestamp_prefix = datetime.now().strftime("%Y%m%d_%H%M%S_")
@@ -667,12 +962,7 @@ def upload_evidence():
     with open(file_path, "wb") as out:
         out.write(file_bytes)
 
-    tx_meta, bc_err = blockchain.add_evidence(evidence_id, file_hash, original_filename, case_id)
-    if bc_err:
-        app.logger.warning("Blockchain registration failed: %s", bc_err)
-        tx_meta = offline_tx_meta()
-
-    tx_hash = tx_meta["tx_hash"]
+    tx_hash = "PENDING-WITNESS-" + uuid.uuid4().hex[:16]
 
     db.save_evidence(
         evidence_id,
@@ -680,44 +970,125 @@ def upload_evidence():
         stored_filename,
         file_size,
         file_hash,
-        case_id,
-        description,
+        form_fields["case_id"],
+        form_fields["description"],
         session["user_id"],
         tx_hash,
+        warrant_number=form_fields["warrant_number"],
+        source_gps=form_fields["source_gps"],
+        source_device_id=form_fields["source_device_id"],
+        is_private=form_fields["is_private"],
+        witness_required_id=witness_user_id_int,
     )
 
     db.add_custody_log(
         evidence_id,
-        "Collected",
+        "Seizure Initiated",
         session["user_id"],
-        "Initial evidence upload and registration",
+        f"Seizure initiated under warrant {form_fields['warrant_number']}. Awaiting witness signature.",
         tx_hash,
     )
 
     return jsonify(
         {
-            "message": "Evidence uploaded successfully",
+            "message": "Seizure initiated. Awaiting witness attestation.",
             "evidence_id": evidence_id,
             "file_hash": file_hash,
             "tx_hash": tx_hash,
-            "blockchain_registered": bc_err is None,
-            "blockchain_mode": "online" if bc_err is None else "fallback",
-            "blockchain_error": bc_err,
-            "tx_metadata": tx_meta,
+            "status": "pending_witness",
+            "witness_required_id": witness_user_id_int,
+            "witness_required_name": witness["name"],
+            "seizure_metadata": {
+                "case_id": form_fields["case_id"],
+                "warrant_number": form_fields["warrant_number"],
+                "source_gps": form_fields["source_gps"],
+                "source_device_id": form_fields["source_device_id"],
+                "is_private": form_fields["is_private"],
+            },
             "preview": build_preview_metadata(evidence_id, original_filename),
             "max_size_mb": MAX_EVIDENCE_FILE_SIZE_MB,
         }
-    ), 201
+    ), 202
+
+
+@app.route("/api/seizure/attest", methods=["POST"])
+@login_required
+def attest_seizure():
+    data = request.get_json()
+    if not data:
+        return jsonify({"error": ERR_INVALID_REQUEST_BODY}), 400
+
+    evidence_id = data.get("evidence_id", "").strip()
+    note = data.get("note", "").strip()
+    if not evidence_id:
+        return jsonify({"error": ERR_EVIDENCE_ID_REQUIRED}), 400
+
+    evidence = db.get_evidence_by_id(evidence_id)
+    if not evidence:
+        return jsonify({"error": ERR_EVIDENCE_NOT_FOUND}), 404
+    if evidence.get("status") != "pending_witness":
+        return jsonify({"error": "Evidence is not awaiting witness attestation"}), 409
+    if int(evidence.get("witness_required_id") or 0) != int(session["user_id"]):
+        return jsonify({"error": "Only the designated witness can attest this seizure"}), 403
+
+    tx_meta, bc_err = blockchain.add_evidence(
+        evidence_id,
+        evidence["file_hash"],
+        evidence["file_name"],
+        evidence.get("case_id") or "CASE-UNKNOWN",
+    )
+    if bc_err:
+        app.logger.warning("Witness attestation blockchain registration failed: %s", bc_err)
+        tx_meta = offline_tx_meta()
+
+    tx_hash = tx_meta["tx_hash"]
+    db.mark_evidence_witness_signed(evidence_id, session["user_id"], tx_hash)
+
+    tx_meta_transfer, bc_err_transfer = blockchain.transfer_evidence(
+        evidence_id,
+        "Witness Attested",
+        note or "Witness attested seizure handshake",
+    )
+    if bc_err_transfer:
+        tx_meta_transfer = offline_tx_meta()
+
+    db.add_custody_log(
+        evidence_id,
+        "Witness Attested",
+        session["user_id"],
+        note or "Two-factor seizure handshake completed",
+        tx_meta_transfer["tx_hash"],
+    )
+
+    return jsonify(
+        {
+            "message": "Witness attestation completed. Evidence is now on-chain.",
+            "evidence_id": evidence_id,
+            "tx_hash": tx_hash,
+            "tx_metadata": tx_meta,
+            "attestation_tx_metadata": tx_meta_transfer,
+            "blockchain_registered": bc_err is None,
+            "blockchain_error": bc_err,
+        }
+    )
 
 
 @app.route("/api/evidence", methods=["GET"])
 @login_required
 def list_evidence():
-    evidence_list = db.get_all_evidence()
+    user = db.get_user_by_id(session["user_id"])
+    if not user:
+        return jsonify({"error": ERR_USER_NOT_FOUND}), 404
+
+    if user["role"] == "admin":
+        evidence_list = db.get_all_evidence()
+    else:
+        evidence_list = db.get_evidence_by_uploader(user["id"])
+
     enriched = []
     for item in evidence_list:
         row = dict(item)
-        row["preview"] = build_preview_metadata(row["evidence_id"], row["file_name"])
+        row["preview"] = build_preview_metadata(row["evidence_id"], row["file_name"], row.get("file_path"))
         enriched.append(row)
     return jsonify(enriched)
 
@@ -725,15 +1096,21 @@ def list_evidence():
 @app.route("/api/evidence/<evidence_id>", methods=["GET"])
 @login_required
 def get_evidence(evidence_id):
+    user = db.get_user_by_id(session["user_id"])
+    if not user:
+        return jsonify({"error": ERR_USER_NOT_FOUND}), 404
+
     evidence = db.get_evidence_by_id(evidence_id)
     if not evidence:
-        return jsonify({"error": "Evidence not found"}), 404
+        return jsonify({"error": ERR_EVIDENCE_NOT_FOUND}), 404
+    if not user_can_access_evidence(user, evidence):
+        return jsonify({"error": "Access denied. Submit access request with legal reason."}), 403
 
     custody = db.get_custody_logs(evidence_id)
     bc_data, bc_err = blockchain.get_evidence(evidence_id)
 
     payload = dict(evidence)
-    payload["preview"] = build_preview_metadata(evidence_id, payload["file_name"])
+    payload["preview"] = build_preview_metadata(evidence_id, payload["file_name"], payload.get("file_path"))
     tx_meta, tx_err = blockchain.get_transaction_info(payload.get("tx_hash") or "")
     payload["tx_metadata"] = tx_meta if tx_meta else {
         "tx_hash": payload.get("tx_hash"),
@@ -764,17 +1141,26 @@ def get_evidence(evidence_id):
 @app.route("/api/evidence/<evidence_id>/file", methods=["GET"])
 @login_required
 def serve_evidence_file(evidence_id):
+    user = db.get_user_by_id(session["user_id"])
+    if not user:
+        return jsonify({"error": ERR_USER_NOT_FOUND}), 404
+
     evidence = db.get_evidence_by_id(evidence_id)
     if not evidence:
-        return jsonify({"error": "Evidence not found"}), 404
+        return jsonify({"error": ERR_EVIDENCE_NOT_FOUND}), 404
+    if not user_can_access_evidence(user, evidence):
+        return jsonify({"error": "Access denied. Submit access request with legal reason."}), 403
 
     if not can_preview(evidence["file_name"]):
         return jsonify({"error": "Preview not supported for this file type"}), 415
 
-    storage_name = evidence["file_path"]
-    abs_path = os.path.join(UPLOAD_FOLDER, storage_name)
-    if not os.path.exists(abs_path):
+    storage_name, abs_path = resolve_storage_file(evidence)
+    if not abs_path:
         return jsonify({"error": "Evidence file missing from storage"}), 404
+
+    # Auto-heal stale/dirty DB paths so next access is direct.
+    if storage_name != (evidence.get("file_path") or ""):
+        db.update_evidence_file_path(evidence_id, storage_name)
 
     mime_type, _ = mimetypes.guess_type(evidence["file_name"])
     response = send_from_directory(
@@ -790,56 +1176,30 @@ def serve_evidence_file(evidence_id):
 @app.route("/api/verify_evidence", methods=["POST"])
 @login_required
 def verify_evidence():
-    if "file" in request.files:
-        file = request.files["file"]
-        evidence_id = request.form.get("evidence_id")
-        if not evidence_id:
-            return jsonify({"error": "evidence_id required"}), 400
-        data = file.read()
-        current_hash = generate_hash_from_bytes(data)
-    else:
-        body = request.get_json()
-        if not body:
-            return jsonify({"error": "Invalid request body"}), 400
-        evidence_id = body.get("evidence_id")
-        if not evidence_id:
-            return jsonify({"error": "evidence_id required"}), 400
-
-        evidence = db.get_evidence_by_id(evidence_id)
-        if not evidence:
-            return jsonify({"error": "Evidence not found"}), 404
-
-        file_path = os.path.join(UPLOAD_FOLDER, evidence["file_path"])
-        if not os.path.exists(file_path):
-            return jsonify({"error": "Evidence file missing from storage"}), 404
-
-        current_hash = generate_file_hash(file_path)
+    evidence_id, current_hash, input_error = resolve_verify_input_or_error()
+    if input_error:
+        return input_error
 
     result, err = blockchain.verify_evidence(evidence_id, current_hash)
     if err:
-        evidence = db.get_evidence_by_id(evidence_id)
-        if not evidence:
-            return jsonify({"error": "Evidence not found"}), 404
-        stored_hash = evidence["file_hash"]
-        intact = stored_hash.lower() == current_hash.lower()
-        result = {
-            "intact": intact,
-            "stored_hash": stored_hash,
-            "current_hash": current_hash,
-            "evidence_id": evidence_id,
-            "source": "database",
-        }
+        result, fallback_error = db_fallback_verify_result(evidence_id, current_hash)
+        if fallback_error:
+            return fallback_error
     else:
         result["source"] = "blockchain"
 
-    new_status = "verified" if result["intact"] else "tampered"
-    db.update_evidence_status(evidence_id, new_status)
-    db.add_custody_log(
-        evidence_id,
-        "Verified" if result["intact"] else "Tamper Detected",
-        session["user_id"],
-        f"Hash verification: {'PASSED' if result['intact'] else 'FAILED'}",
-    )
+    evidence = db.get_evidence_by_id(evidence_id)
+    if evidence_is_sealed(evidence):
+        result["sealed"] = True
+    else:
+        new_status = "verified" if result["intact"] else "tampered"
+        db.update_evidence_status(evidence_id, new_status)
+        db.add_custody_log(
+            evidence_id,
+            "Verified" if result["intact"] else "Tamper Detected",
+            session["user_id"],
+            f"Hash verification: {'PASSED' if result['intact'] else 'FAILED'}",
+        )
 
     return jsonify(result)
 
@@ -849,7 +1209,7 @@ def verify_evidence():
 def transfer_evidence():
     data = request.get_json()
     if not data:
-        return jsonify({"error": "Invalid request body"}), 400
+        return jsonify({"error": ERR_INVALID_REQUEST_BODY}), 400
 
     required = ["evidence_id", "action", "note"]
     if not all(k in data for k in required):
@@ -870,7 +1230,9 @@ def transfer_evidence():
 
     evidence = db.get_evidence_by_id(data["evidence_id"])
     if not evidence:
-        return jsonify({"error": "Evidence not found"}), 404
+        return jsonify({"error": ERR_EVIDENCE_NOT_FOUND}), 404
+    if evidence_is_sealed(evidence):
+        return jsonify({"error": "Evidence is court-sealed and immutable"}), 423
 
     tx_meta, bc_err = blockchain.transfer_evidence(data["evidence_id"], data["action"], data["note"])
     if bc_err:
@@ -892,9 +1254,294 @@ def transfer_evidence():
     )
 
 
+@app.route("/api/evidence/branch", methods=["POST"])
+@role_required("analyst")
+def branch_evidence():
+    if "file" not in request.files:
+        return jsonify({"error": "No file provided"}), 400
+
+    parent_evidence_id = request.form.get("parent_evidence_id", "").strip()
+    if not parent_evidence_id:
+        return jsonify({"error": "parent_evidence_id required"}), 400
+
+    parent = db.get_evidence_by_id(parent_evidence_id)
+    if not parent:
+        return jsonify({"error": "Parent evidence not found"}), 404
+    if evidence_is_sealed(parent):
+        return jsonify({"error": "Parent evidence is sealed; no derived evidence can be created"}), 423
+
+    file = request.files["file"]
+    if file.filename == "":
+        return jsonify({"error": "No file selected"}), 400
+    if not allowed_file(file.filename):
+        return jsonify({"error": "File type not allowed"}), 400
+
+    original_filename = secure_filename(file.filename)
+    file_bytes = file.read()
+    file_size = len(file_bytes)
+    if file_size > MAX_EVIDENCE_FILE_SIZE_BYTES:
+        return jsonify({"error": f"File too large. Max allowed size is {MAX_EVIDENCE_FILE_SIZE_MB} MB"}), 413
+
+    child_hash = generate_hash_from_bytes(file_bytes)
+    child_id = "EV-" + uuid.uuid4().hex[:8].upper()
+    timestamp_prefix = datetime.now().strftime("%Y%m%d_%H%M%S_")
+    stored_filename = timestamp_prefix + original_filename
+    file_path = os.path.join(UPLOAD_FOLDER, stored_filename)
+    with open(file_path, "wb") as out:
+        out.write(file_bytes)
+
+    tx_meta_add, bc_err_add = blockchain.add_evidence(
+        child_id,
+        child_hash,
+        original_filename,
+        parent.get("case_id") or "CASE-UNKNOWN",
+    )
+    if bc_err_add:
+        tx_meta_add = offline_tx_meta()
+
+    tx_meta_link, bc_err_link = blockchain.transfer_evidence(
+        child_id,
+        "Derived",
+        f"ParentEvidence={parent_evidence_id};ParentHash={parent['file_hash']}",
+    )
+    if bc_err_link:
+        tx_meta_link = offline_tx_meta()
+
+    db.save_evidence(
+        child_id,
+        original_filename,
+        stored_filename,
+        file_size,
+        child_hash,
+        parent.get("case_id"),
+        request.form.get("description", "Derived evidence artifact"),
+        session["user_id"],
+        tx_meta_add["tx_hash"],
+        warrant_number=parent.get("warrant_number") or "",
+        source_gps=parent.get("source_gps") or "",
+        source_device_id=parent.get("source_device_id") or "",
+        is_private=bool(parent.get("is_private")),
+        parent_evidence_id=parent_evidence_id,
+        witness_signed_by=session["user_id"],
+    )
+
+    db.add_custody_log(
+        child_id,
+        "Derived Evidence Created",
+        session["user_id"],
+        f"Derived from parent {parent_evidence_id} without altering original evidence",
+        tx_meta_link["tx_hash"],
+    )
+
+    return jsonify(
+        {
+            "message": "Derived evidence branch created",
+            "child_evidence_id": child_id,
+            "parent_evidence_id": parent_evidence_id,
+            "file_hash": child_hash,
+            "tx_metadata": {
+                "add": tx_meta_add,
+                "link": tx_meta_link,
+            },
+            "blockchain_errors": {
+                "add": bc_err_add,
+                "link": bc_err_link,
+            },
+        }
+    ), 201
+
+
+@app.route("/api/evidence/<evidence_id>/request-access", methods=["POST"])
+@login_required
+def request_private_access(evidence_id):
+    user = db.get_user_by_id(session["user_id"])
+    if not user:
+        return jsonify({"error": ERR_USER_NOT_FOUND}), 404
+
+    evidence = db.get_evidence_by_id(evidence_id)
+    if not evidence:
+        return jsonify({"error": ERR_EVIDENCE_NOT_FOUND}), 404
+    if not evidence.get("is_private"):
+        return jsonify({"error": "Evidence is not private; no subpoena request needed"}), 400
+    if int(evidence.get("uploaded_by") or 0) == int(user["id"]):
+        return jsonify({"error": "Owner already has access"}), 400
+
+    data = request.get_json() or {}
+    reason = (data.get("reason") or "").strip()
+    if len(reason) < 12:
+        return jsonify({"error": "reason must be at least 12 characters"}), 400
+
+    request_id = db.create_access_request(
+        evidence_id,
+        user["id"],
+        evidence["uploaded_by"],
+        reason,
+    )
+
+    db.add_custody_log(
+        evidence_id,
+        "Private Access Requested",
+        user["id"],
+        reason,
+    )
+
+    return jsonify({"message": "Access request submitted", "request_id": request_id}), 201
+
+
+@app.route("/api/evidence/access-requests", methods=["GET"])
+@login_required
+def list_access_requests():
+    return jsonify(db.get_access_requests_for_owner(session["user_id"]))
+
+
+@app.route("/api/evidence/access-requests/<int:request_id>/review", methods=["POST"])
+@login_required
+def review_access_request(request_id):
+    req = db.get_access_request_by_id(request_id)
+    if not req:
+        return jsonify({"error": "Access request not found"}), 404
+    if int(req["owner_id"]) != int(session["user_id"]):
+        return jsonify({"error": "Only evidence owner can review this request"}), 403
+    if req["status"] != "pending":
+        return jsonify({"error": "Request already reviewed"}), 409
+
+    body = request.get_json() or {}
+    decision = (body.get("decision") or "").strip().lower()
+    if decision not in {"approved", "rejected"}:
+        return jsonify({"error": "decision must be approved or rejected"}), 400
+
+    db.review_access_request(request_id, decision, session["user_id"])
+    db.add_custody_log(
+        req["evidence_id"],
+        "Private Access " + ("Approved" if decision == "approved" else "Rejected"),
+        session["user_id"],
+        req["reason"],
+    )
+
+    return jsonify({"message": f"Request {decision}"})
+
+
+@app.route("/api/evidence/<evidence_id>/seal", methods=["POST"])
+@role_required("court_authority")
+def seal_evidence(evidence_id):
+    evidence = db.get_evidence_by_id(evidence_id)
+    if not evidence:
+        return jsonify({"error": ERR_EVIDENCE_NOT_FOUND}), 404
+    if evidence_is_sealed(evidence):
+        return jsonify({"error": "Evidence already sealed"}), 409
+
+    tx_meta, bc_err = blockchain.transfer_evidence(
+        evidence_id,
+        "Sealed",
+        "Court-sealed final legal record",
+    )
+    if bc_err:
+        tx_meta = offline_tx_meta()
+
+    sealed = db.seal_evidence(evidence_id, session["user_id"])
+    if not sealed:
+        return jsonify({"error": "Failed to seal evidence"}), 500
+
+    db.add_custody_log(
+        evidence_id,
+        "Sealed by Court",
+        session["user_id"],
+        "Evidence record is now immutable",
+        tx_meta["tx_hash"],
+    )
+
+    return jsonify(
+        {
+            "message": "Evidence sealed",
+            "evidence_id": evidence_id,
+            "tx_metadata": tx_meta,
+            "blockchain_error": bc_err,
+        }
+    )
+
+
+@app.route("/api/evidence/<evidence_id>/verification-link", methods=["POST"])
+@role_required("court_authority")
+def create_public_verification_link(evidence_id):
+    evidence = db.get_evidence_by_id(evidence_id)
+    if not evidence:
+        return jsonify({"error": ERR_EVIDENCE_NOT_FOUND}), 404
+
+    body = request.get_json() or {}
+    expires_minutes = body.get("expires_minutes", 30)
+    try:
+        expires_minutes = int(expires_minutes)
+    except ValueError:
+        expires_minutes = 30
+    expires_minutes = max(5, min(expires_minutes, 120))
+
+    token = secrets.token_urlsafe(32)
+    token_h = hash_token(token)
+    expires_at = now_utc() + timedelta(minutes=expires_minutes)
+    db.create_verification_link(token_h, evidence_id, session["user_id"], expires_at)
+
+    return jsonify(
+        {
+            "verification_link": f"{APP_URL}/api/public/verify?token={token}",
+            "expires_at": expires_at.isoformat() + "Z",
+            "one_time": True,
+            "evidence_id": evidence_id,
+        }
+    )
+
+
+@app.route("/api/public/verify", methods=["GET", "POST"])
+def public_verify_with_link():
+    if request.method == "GET":
+        token = (request.args.get("token") or "").strip()
+    else:
+        body = request.get_json(silent=True) or {}
+        token = (body.get("token") or "").strip()
+
+    if not token:
+        return jsonify({"error": "token required"}), 400
+
+    token_h = hash_token(token)
+    link_row = db.consume_verification_link(token_h)
+    if not link_row:
+        return jsonify({"error": "Invalid, expired, or already-used token"}), 401
+
+    evidence = db.get_evidence_by_id(link_row["evidence_id"])
+    if not evidence:
+        return jsonify({"error": ERR_EVIDENCE_NOT_FOUND}), 404
+
+    if "file" in request.files:
+        candidate_hash = generate_hash_from_bytes(request.files["file"].read())
+    else:
+        data = request.get_json(silent=True) or {}
+        candidate_hash = (data.get("file_hash") or "").strip().lower()
+        if not candidate_hash:
+            return jsonify({"error": "Provide either a file upload or file_hash in JSON body"}), 400
+
+    stored_hash = (evidence["file_hash"] or "").lower()
+    intact = hmac.compare_digest(stored_hash, candidate_hash.lower())
+
+    return jsonify(
+        {
+            "verified": intact,
+            "evidence_id": evidence["evidence_id"],
+            "case_id": evidence.get("case_id"),
+            "note": "One-time verification completed",
+        }
+    )
+
+
 @app.route("/api/evidence_history/<evidence_id>", methods=["GET"])
 @login_required
 def evidence_history(evidence_id):
+    user = db.get_user_by_id(session["user_id"])
+    if not user:
+        return jsonify({"error": ERR_USER_NOT_FOUND}), 404
+
+    # Personal audit model for analyst/police/investigator: only files they touched.
+    if user["role"] in {"analyst", "police", "investigator"} and not db.user_touched_evidence(evidence_id, user["id"]):
+        return jsonify({"error": "Access denied. Personal audit scope only."}), 403
+
     logs = db.get_custody_logs(evidence_id)
     bc_chain, _ = blockchain.get_custody_chain(evidence_id)
     return jsonify({"evidence_id": evidence_id, "db_logs": logs, "blockchain_logs": bc_chain})
@@ -905,7 +1552,7 @@ def evidence_history(evidence_id):
 def dashboard_stats():
     user = db.get_user_by_id(session["user_id"])
     if not user:
-        return jsonify({"error": "User not found"}), 404
+        return jsonify({"error": ERR_USER_NOT_FOUND}), 404
 
     if user["role"] == "admin":
         stats = db.get_stats()
@@ -923,7 +1570,7 @@ def dashboard_stats():
 def dashboard_activity():
     user = db.get_user_by_id(session["user_id"])
     if not user:
-        return jsonify({"error": "User not found"}), 404
+        return jsonify({"error": ERR_USER_NOT_FOUND}), 404
 
     limit_raw = request.args.get("limit", "12")
     try:
@@ -932,18 +1579,226 @@ def dashboard_activity():
         limit = 12
     limit = max(1, min(limit, 50))
 
-    if user["role"] == "admin":
+    if user["role"] in {"analyst", "police", "investigator"}:
+        logs = db.get_recent_activity_for_touched_files(user["id"], limit=limit)
+        scope = "personal"
+    else:
         logs = db.get_recent_activity(limit=limit, user_id=None)
         scope = "global"
-    else:
-        logs = db.get_recent_activity(limit=limit, user_id=user["id"])
-        scope = "personal"
 
     return jsonify({
         "scope": scope,
         "role": user["role"],
         "logs": logs,
     })
+
+
+@app.route("/api/evidence/<evidence_id>/access-token", methods=["POST"])
+@role_required("admin", "court_authority")
+def issue_police_access_token(evidence_id):
+    evidence = db.get_evidence_by_id(evidence_id)
+    if not evidence:
+        return jsonify({"error": ERR_EVIDENCE_NOT_FOUND}), 404
+
+    body = request.get_json() or {}
+    expires_minutes = body.get("expires_minutes", 30)
+    max_uses = body.get("max_uses", 1)
+    note = (body.get("note") or "Token-gated police access").strip()
+    try:
+        expires_minutes = int(expires_minutes)
+    except ValueError:
+        expires_minutes = 30
+    try:
+        max_uses = int(max_uses)
+    except ValueError:
+        max_uses = 1
+
+    expires_minutes = max(5, min(expires_minutes, 240))
+    max_uses = max(1, min(max_uses, 10))
+
+    token = secrets.token_urlsafe(24)
+    token_h = hash_token(token)
+    expires_at = now_utc() + timedelta(minutes=expires_minutes)
+    token_id = db.create_police_access_token(
+        evidence_id,
+        token_h,
+        session["user_id"],
+        note,
+        expires_at,
+        max_uses=max_uses,
+    )
+    if not token_id:
+        return jsonify({"error": "Failed to issue access token"}), 500
+
+    return jsonify(
+        {
+            "message": "Access token issued",
+            "evidence_id": evidence_id,
+            "token": token,
+            "expires_at": expires_at.isoformat() + "Z",
+            "max_uses": max_uses,
+            "note": note,
+        }
+    ), 201
+
+
+@app.route("/api/evidence/<evidence_id>/use-token", methods=["POST"])
+@role_required("police")
+def use_police_token(evidence_id):
+    evidence = db.get_evidence_by_id(evidence_id)
+    if not evidence:
+        return jsonify({"error": ERR_EVIDENCE_NOT_FOUND}), 404
+
+    if int(evidence.get("uploaded_by") or 0) == int(session["user_id"]):
+        return jsonify({"message": "Own evidence does not require token"}), 200
+
+    body = request.get_json() or {}
+    token = (body.get("token") or "").strip()
+    if not token:
+        return jsonify({"error": "token required"}), 400
+
+    token_row = db.use_police_access_token(evidence_id, hash_token(token))
+    if not token_row:
+        return jsonify({"error": "Invalid/expired/exhausted token"}), 401
+
+    note = token_row.get("note") or "Police token-gate access"
+    tx_meta, bc_err = blockchain.transfer_evidence(
+        evidence_id,
+        "GrantAccess",
+        f"PoliceTokenAccess by user={session['user_id']}; reason={note}",
+    )
+    if bc_err:
+        tx_meta = offline_tx_meta()
+
+    db.add_police_access_grant(
+        evidence_id,
+        session["user_id"],
+        token_row["id"],
+        token_row.get("issued_by"),
+        note,
+        tx_meta["tx_hash"],
+    )
+
+    db.add_custody_log(
+        evidence_id,
+        "GrantAccess",
+        session["user_id"],
+        f"Token-gate access granted: {note}",
+        tx_meta["tx_hash"],
+    )
+
+    return jsonify(
+        {
+            "message": "Token accepted. Access granted.",
+            "evidence_id": evidence_id,
+            "tx_metadata": tx_meta,
+            "blockchain_error": bc_err,
+        }
+    )
+
+
+@app.route("/api/admin/timeline-by-user", methods=["GET"])
+@role_required("admin")
+def admin_timeline_by_user():
+    limit_raw = request.args.get("limit", "200")
+    try:
+        limit = int(limit_raw)
+    except ValueError:
+        limit = 200
+    limit = max(20, min(limit, 500))
+
+    logs = db.get_admin_timeline_by_user(limit=limit)
+    grouped = {}
+    for row in logs:
+        actor_id = str(row.get("user_id") or "system")
+        actor_key = f"{actor_id}:{row.get('actor_name') or 'System'}"
+        if actor_key not in grouped:
+            grouped[actor_key] = {
+                "actor_id": row.get("user_id"),
+                "actor_name": row.get("actor_name") or "System",
+                "actor_role": row.get("actor_role") or "unknown",
+                "events": [],
+            }
+        grouped[actor_key]["events"].append(dict(row))
+
+    return jsonify({"groups": list(grouped.values()), "total_events": len(logs)})
+
+
+@app.route("/api/admin/super-view/users", methods=["GET"])
+@role_required("admin")
+def admin_super_view_users():
+    return jsonify(db.get_non_admin_users())
+
+
+@app.route("/api/admin/super-view/<int:user_id>/folders", methods=["GET"])
+@role_required("admin")
+def admin_super_view_folders(user_id):
+    user = db.get_user_by_id(user_id)
+    if not user:
+        return jsonify({"error": ERR_USER_NOT_FOUND}), 404
+
+    evidence_rows = db.get_evidence_by_uploader(user_id)
+    tree = {}
+    for item in evidence_rows:
+        created = item.get("created_at")
+        if created is None:
+            continue
+        year = f"{created.year:04d}"
+        month = f"{created.month:02d}"
+        day = f"{created.day:02d}"
+        tree.setdefault(year, {})
+        tree[year].setdefault(month, {})
+        tree[year][month].setdefault(day, [])
+        tree[year][month][day].append(
+            {
+                "evidence_id": item["evidence_id"],
+                "file_name": item["file_name"],
+                "status": item.get("status"),
+                "created_at": item.get("created_at"),
+            }
+        )
+
+    return jsonify({
+        "user": {
+            "id": user["id"],
+            "name": user["name"],
+            "role": user["role"],
+        },
+        "folders": tree,
+        "total_evidence": len(evidence_rows),
+    })
+
+
+@app.route("/api/admin/super-view/evidence/<evidence_id>/timeline", methods=["GET"])
+@role_required("admin")
+def admin_super_view_evidence_timeline(evidence_id):
+    evidence = db.get_evidence_by_id(evidence_id)
+    if not evidence:
+        return jsonify({"error": ERR_EVIDENCE_NOT_FOUND}), 404
+
+    uploader_id = evidence.get("uploaded_by")
+    system_logs = db.get_system_logs_for_user(uploader_id, limit=200) if uploader_id else []
+    evidence_logs = db.get_custody_logs(evidence_id)
+
+    timeline = []
+    append_system_timeline_events(timeline, system_logs, evidence.get("created_at"))
+    append_evidence_timeline_events(timeline, evidence_logs)
+    append_blockchain_timeline_events(timeline, evidence, evidence_logs)
+
+    timeline.sort(key=lambda x: x.get("timestamp") or datetime.min)
+
+    return jsonify(
+        {
+            "evidence": {
+                "evidence_id": evidence.get("evidence_id"),
+                "file_name": evidence.get("file_name"),
+                "uploaded_by": evidence.get("uploader_name"),
+                "created_at": evidence.get("created_at"),
+                "status": evidence.get("status"),
+            },
+            "timeline": timeline,
+        }
+    )
 
 
 # Admin API
@@ -956,18 +1811,32 @@ def admin_users():
 @app.route("/api/admin/users/<int:user_id>/disable", methods=["POST"])
 @role_required("admin")
 def admin_disable_user(user_id):
+    data = request.get_json(silent=True) or {}
+    reason = (data.get("reason") or "").strip()
+    if len(reason) < 12:
+        return jsonify({"error": "A detailed reason (min 12 chars) is required for deactivation request"}), 400
+
     user = db.get_user_by_id(user_id)
     if not user:
-        return jsonify({"error": "User not found"}), 404
+        return jsonify({"error": ERR_USER_NOT_FOUND}), 404
     if user["role"] == "admin":
         return jsonify({"error": "Admin account cannot be disabled"}), 400
+    if user["role"] != "investigator":
+        return jsonify({"error": "Multi-sig deactivation endpoint is restricted to investigator accounts"}), 400
     if user["id"] == session.get("user_id"):
         return jsonify({"error": "You cannot disable your own account"}), 400
 
-    updated = db.set_user_active(user_id, False)
-    if not updated:
-        return jsonify({"error": "Failed to disable user"}), 500
-    return jsonify({"message": "User disabled"})
+    action_id = db.create_admin_action("deactivate_user", user_id, session["user_id"], reason)
+    if not action_id:
+        return jsonify({"error": "Failed to create admin action request"}), 500
+
+    return jsonify(
+        {
+            "message": "Deactivation request created. Second admin approval required.",
+            "action_id": action_id,
+            "status": "pending",
+        }
+    ), 202
 
 
 @app.route("/api/admin/users/<int:user_id>/enable", methods=["POST"])
@@ -975,7 +1844,7 @@ def admin_disable_user(user_id):
 def admin_enable_user(user_id):
     user = db.get_user_by_id(user_id)
     if not user:
-        return jsonify({"error": "User not found"}), 404
+        return jsonify({"error": ERR_USER_NOT_FOUND}), 404
 
     updated = db.set_user_active(user_id, True)
     if not updated:
@@ -983,12 +1852,49 @@ def admin_enable_user(user_id):
     return jsonify({"message": "User enabled"})
 
 
+@app.route("/api/admin/actions/pending", methods=["GET"])
+@role_required("admin")
+def list_pending_admin_actions():
+    return jsonify(db.get_pending_admin_actions())
+
+
+@app.route("/api/admin/actions/<int:action_id>/approve", methods=["POST"])
+@role_required("admin")
+def approve_admin_action(action_id):
+    action = db.get_admin_action_by_id(action_id)
+    if not action:
+        return jsonify({"error": "Admin action not found"}), 404
+    if action["status"] != "pending":
+        return jsonify({"error": "Action is no longer pending"}), 409
+    if int(action["requested_by"]) == int(session["user_id"]):
+        return jsonify({"error": "Requester cannot self-approve admin action"}), 403
+
+    if action["action_type"] == "deactivate_user":
+        target = db.get_user_by_id(action["target_user_id"])
+        if not target:
+            return jsonify({"error": "Target user not found"}), 404
+        if target["role"] != "investigator":
+            return jsonify({"error": "Target is no longer an investigator"}), 409
+
+        updated = db.set_user_active(action["target_user_id"], False)
+        if not updated:
+            return jsonify({"error": "Failed to deactivate target user"}), 500
+    else:
+        return jsonify({"error": "Unsupported admin action type"}), 400
+
+    approved = db.approve_admin_action(action_id, session["user_id"])
+    if not approved:
+        return jsonify({"error": "Failed to mark action as approved"}), 500
+
+    return jsonify({"message": "Admin action approved and executed"})
+
+
 @app.route("/api/admin/users/<int:user_id>", methods=["DELETE"])
 @role_required("admin")
 def admin_delete_user(user_id):
     user = db.get_user_by_id(user_id)
     if not user:
-        return jsonify({"error": "User not found"}), 404
+        return jsonify({"error": ERR_USER_NOT_FOUND}), 404
     if user["role"] == "admin":
         return jsonify({"error": "Admin account cannot be deleted"}), 400
     if user["id"] == session.get("user_id"):
@@ -1058,7 +1964,7 @@ def deploy_contract():
 def set_contract_address():
     data = request.get_json()
     if not data:
-        return jsonify({"error": "Invalid request body"}), 400
+        return jsonify({"error": ERR_INVALID_REQUEST_BODY}), 400
     if "address" not in data:
         return jsonify({"error": "address required"}), 400
 
@@ -1079,8 +1985,9 @@ if __name__ == "__main__":
     print("=" * 60)
 
     port = int(os.environ.get("PORT", 5000))
+    host = os.environ.get("HOST", "127.0.0.1")
     app.run(
         debug=os.environ.get("FLASK_DEBUG", "false").lower() == "true",
-        host="0.0.0.0",
+        host=host,
         port=port,
     )

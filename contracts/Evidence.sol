@@ -23,9 +23,11 @@ contract EvidenceManagement {
 
     mapping(string => Evidence) public evidences;
     mapping(string => CustodyRecord[]) public custodyChain;
+    mapping(bytes32 => bool) public accessRequests;
 
     event EvidenceAdded(string evidenceId, string fileHash, address owner, uint256 timestamp);
     event CustodyTransferred(string evidenceId, string action, address actor, uint256 timestamp);
+    event AccessGranted(bytes32 evidenceHash, address requester, string token, uint256 timestamp);
 
     function addEvidence(
         string memory _id,
@@ -107,5 +109,11 @@ contract EvidenceManagement {
 
     function evidenceExists(string memory _id) public view returns (bool) {
         return evidences[_id].exists;
+    }
+
+    function requestAccess(bytes32 evidenceHash, string memory token) public {
+        require(bytes(token).length > 0, "Token required");
+        accessRequests[evidenceHash] = true;
+        emit AccessGranted(evidenceHash, msg.sender, token, block.timestamp);
     }
 }
