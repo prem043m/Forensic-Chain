@@ -703,6 +703,16 @@ def health():
     return jsonify(payload), 200 if db_ok else 503
 
 
+@app.route("/status", methods=["GET"])
+def status():
+    return jsonify(
+        {
+            "connected": bool(blockchain.w3 and blockchain.w3.is_connected()),
+            "network": "sepolia",
+        }
+    ), 200
+
+
 # Auth API
 @app.route("/api/auth/register", methods=["POST"])
 def register():
