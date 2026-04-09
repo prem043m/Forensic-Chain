@@ -33,6 +33,7 @@ TX_RECEIPT_TIMEOUT_SEC = int(os.getenv("TX_RECEIPT_TIMEOUT_SEC", "120"))
 DEFAULT_CONTRACT_ADDRESS = os.getenv("CONTRACT_ADDRESS", "")
 CONTRACT_ADDRESS_FILE = os.path.join(os.path.dirname(__file__), "contract_address.txt")
 ABI_FILE = os.path.join(os.path.dirname(__file__), "..", "contracts", "Evidence_abi.json")
+ERR_BLOCKCHAIN_NOT_READY = "Blockchain not connected or contract not deployed"
 
 # EvidenceManagement ABI (generated from Evidence.sol)
 CONTRACT_ABI = [
@@ -205,13 +206,11 @@ class BlockchainManager:
             return False
 
     def _load_contract(self):
+        # Prefer the deployed environment value first so Render can override a stale file.
         address = DEFAULT_CONTRACT_ADDRESS.strip()
-
-        if os.path.exists(CONTRACT_ADDRESS_FILE):
+        if not address and os.path.exists(CONTRACT_ADDRESS_FILE):
             with open(CONTRACT_ADDRESS_FILE) as f:
-                file_address = f.read().strip()
-                if file_address:
-                    address = file_address
+                address = f.read().strip()
 
         if address:
             checksum = Web3.to_checksum_address(address)
@@ -344,7 +343,7 @@ class BlockchainManager:
 
     def add_evidence(self, evidence_id, file_hash, file_name, case_id, from_account=None):
         if not self._connected or not self.contract:
-            return None, "Blockchain not connected or contract not deployed"
+            return None, ERR_BLOCKCHAIN_NOT_READY
         try:
             acct = from_account or self.account
             with self._tx_lock:
@@ -365,7 +364,7 @@ class BlockchainManager:
 
     def transfer_evidence(self, evidence_id, action, note, from_account=None):
         if not self._connected or not self.contract:
-            return None, "Blockchain not connected or contract not deployed"
+            return None, ERR_BLOCKCHAIN_NOT_READY
         try:
             acct = from_account or self.account
             with self._tx_lock:
@@ -408,7 +407,7 @@ class BlockchainManager:
 
     def get_evidence(self, evidence_id):
         if not self._connected or not self.contract:
-            return None, "Blockchain not connected or contract not deployed"
+            return None, ERR_BLOCKCHAIN_NOT_READY
         try:
             result = self.contract.functions.getEvidence(evidence_id).call()
             return {
@@ -442,7 +441,7 @@ class BlockchainManager:
     def verify_evidence(self, evidence_id, current_hash):
         """Compare current file hash against blockchain stored hash."""
         if not self._connected or not self.contract:
-            return None, "Blockchain not connected or contract not deployed"
+            return None, ERR_BLOCKCHAIN_NOT_READY
         try:
             data, err = self.get_evidence(evidence_id)
             if err:
