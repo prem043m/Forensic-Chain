@@ -433,6 +433,7 @@ def save_evidence(
     witness_required_id = metadata.get("witness_required_id")
     witness_signed_by = metadata.get("witness_signed_by")
     witness_signed_at = metadata.get("witness_signed_at")
+    status = "pending_witness" if witness_required_id else "active"
 
     conn = get_db()
     cursor = conn.cursor()
@@ -440,9 +441,9 @@ def save_evidence(
         INSERT INTO evidence
             (evidence_id, file_name, file_path, file_size, file_hash,
              case_id, warrant_number, source_gps, source_device_id,
-             description, uploaded_by, tx_hash, is_private,
+             description, uploaded_by, tx_hash, status, is_private,
              parent_evidence_id, witness_required_id, witness_signed_by, witness_signed_at)
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
     """, (
         evidence_id,
         file_name,
@@ -456,6 +457,7 @@ def save_evidence(
         description,
         uploaded_by,
         tx_hash,
+        status,
         is_private,
         parent_evidence_id,
         witness_required_id,

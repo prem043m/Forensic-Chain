@@ -1036,10 +1036,24 @@ def attest_seizure():
     evidence = db.get_evidence_by_id(evidence_id)
     if not evidence:
         return jsonify({"error": ERR_EVIDENCE_NOT_FOUND}), 404
-    if evidence.get("status") != "pending_witness":
+
+    status = str(evidence.get("status") or "").strip().lower()
+    tx_hash = str(evidence.get("tx_hash") or "")
+    legacy_pending = (
+        status == "active"
+        and evidence.get("witness_required_id")
+        and not evidence.get("witness_signed_by")
+        and tx_hash.startswith("PENDING-WITNESS-")
+    )
+
+    if status != "pending_witness" and not legacy_pending:
         return jsonify({"error": "Evidence is not awaiting witness attestation"}), 409
     if int(evidence.get("witness_required_id") or 0) != int(session["user_id"]):
         return jsonify({"error": "Only the designated witness can attest this seizure"}), 403
+
+    # Backward compatibility for records created before pending_witness status was persisted.
+    if legacy_pending:
+        db.update_evidence_status(evidence_id, "pending_witness")
 
     tx_meta, bc_err = blockchain.add_evidence(
         evidence_id,
